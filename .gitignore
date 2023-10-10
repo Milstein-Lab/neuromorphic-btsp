@@ -1,0 +1,5 @@
+/.ipynb_checkpoints
+/sim_data
+__pycache__/
+.idea/
+.DS_Store
