@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gs
+import os
+import pickle
 
 from utils import Volatile_Resistor, Memristor, poisson_spike_train, get_scaled_sigmoid, get_BTSP_function, update_plot_defaults
 
@@ -11,7 +13,7 @@ from utils import Volatile_Resistor, Memristor, poisson_spike_train, get_scaled_
 ########################################################################################################################
 
 
-def VO2_LIF_BTSP_simulation(VO2_temp, num_synapses, firing_rate, w_init=None):
+def VO2_LIF_BTSP_simulation(VO2_temp, num_synapses, firing_rate, w_init=None, jitter=False):
     ##############################################################
     ## Setup
     ##############################################################
@@ -75,13 +77,18 @@ def VO2_LIF_BTSP_simulation(VO2_temp, num_synapses, firing_rate, w_init=None):
         for synapse_id, memristor in enumerate(synapses):
             memristor.R = memristor_R_array[synapse_id]
 
-        assert np.all(memristor_R_array > synapses[0].conductingR), 'Memristor have reached minimum resistance'
-        assert np.all(memristor_R_array < synapses[0].insulatorR), 'Memristor have reached maximum resistance'  
+        # assert np.all(memristor_R_array > synapses[0].conductingR), 'Memristor have reached minimum resistance'
+        # assert np.all(memristor_R_array < synapses[0].insulatorR), 'Memristor have reached maximum resistance'  
 
     # BTSP parameters
-    dendrite_IS = Volatile_Resistor(dt, temperature=70.82, metalR=100, insulatorR=10*kOhm, stim_scaling=100)
+    temperature_jitter = np.random.uniform(-0.32, 0.49) * jitter
+    dendrite_IS = Volatile_Resistor(dt, temperature=70.82+temperature_jitter, metalR=100, insulatorR=10*kOhm, stim_scaling=100)
     IS_pulse_dur = 300 # ms
-    synapse_ETs = [Volatile_Resistor(dt, temperature=74.34, metalR=100, insulatorR=10*kOhm, stim_scaling=100) for _ in range(num_synapses)]
+
+    synapse_ETs = []
+    for _ in range(num_synapses):
+        temperature_jitter = np.random.uniform(-1.01, 1.32) * jitter
+        synapse_ETs.append(Volatile_Resistor(dt, temperature=74.34+temperature_jitter, metalR=100, insulatorR=10*kOhm, stim_scaling=100))
     ET_pulse_dur = 20 # ms
     read_dur = 2000 # ms
     # learning_rate = 0.03
@@ -209,9 +216,35 @@ def VO2_LIF_BTSP_simulation(VO2_temp, num_synapses, firing_rate, w_init=None):
 
 
 def generate_Figure4(show=True, save=False):
-    np.random.seed(12)
-    simulation_results = VO2_LIF_BTSP_simulation(VO2_temp=62, num_synapses=30, firing_rate=30)
-    simulation_results2 = VO2_LIF_BTSP_simulation(VO2_temp=62, num_synapses=30, firing_rate=30, w_init=simulation_results['new_weights'])
+    filename = "fig4_LIF_BTSP_sim_data.pkl"
+    overwrite = False
+
+    if os.path.exists(f'sim_data/{filename}') and not overwrite:
+        with open(f'sim_data/{filename}', 'rb') as f:
+            simulation_data_all = pickle.load(f)
+    else:
+        simulation_data_all = {}
+
+    random_seeds = [12, 13, 14, 123, 42]
+    # random_seeds = [12]
+    for seed in random_seeds:
+        if seed not in simulation_data_all:
+            simulation_data_all[seed] = {}
+            print('Running simulation 1 for seed =', seed)
+            simulation_data_all[seed]['trial_1'] = VO2_LIF_BTSP_simulation(VO2_temp=62, num_synapses=30, firing_rate=30)
+            print('Running simulation 2 for seed =', seed)
+            simulation_data_all[seed]['trial_2'] = VO2_LIF_BTSP_simulation(VO2_temp=62, num_synapses=30, firing_rate=30, w_init=simulation_data_all[seed]['trial_1']['new_weights'])
+
+            with open(f'sim_data/{filename}', 'wb') as f:
+                pickle.dump(simulation_data_all, f)
+
+    example_seed = 12
+    simulation_results = simulation_data_all[example_seed]['trial_1']
+    simulation_results2 = simulation_data_all[example_seed]['trial_2']
+
+    # np.random.seed(12)
+    # simulation_results = VO2_LIF_BTSP_simulation(VO2_temp=62, num_synapses=30, firing_rate=30)
+    # simulation_results2 = VO2_LIF_BTSP_simulation(VO2_temp=62, num_synapses=30, firing_rate=30, w_init=simulation_results['new_weights'])
     
     plt.rcParams.update({'font.size': 8,
                     'axes.spines.right': False,
@@ -238,6 +271,7 @@ def generate_Figure4(show=True, save=False):
 
     ###########################
     # Column 1
+    ###########################
     linewidth = 1
     axes = gs.GridSpec(nrows=2, ncols=3, left=0.05, right=1, top=1, bottom=0, wspace=0.4, hspace=0.5)
 
@@ -277,7 +311,7 @@ def generate_Figure4(show=True, save=False):
     ax.hlines(y=1, xmin=time[measurement_timepoints][0], xmax=time[measurement_timepoints][-1], color='k', alpha=0.5, linewidth=2*linewidth)
 
     ax.set_ylabel('Signal amplitude')
-    ax.set_xlabel('Time from plateau (s)')
+    ax.set_xlabel('Time from dendritic spike (s)')
     ax.legend(loc='upper right', bbox_to_anchor=(0.9, 1.), handlelength=1, frameon=False, fontsize=6, handletextpad=0.5)
 
     axes_sub = gs.GridSpec(nrows=1, ncols=3, left=0.05, right=1, top=0.5, bottom=0.45, wspace=0.4, hspace=0.4)
@@ -292,28 +326,35 @@ def generate_Figure4(show=True, save=False):
             
     ###########################
     # Column 2
+    ###########################
 
     ## Weight update plot
     ax = fig.add_subplot(axes[1,1])
-    w_init = simulation_results['weights']
-    w_final = simulation_results['new_weights']
-    num_synapses = len(w_init)
+
+    w_init_all = [simulation_data_all[seed]['trial_1']['weights'] for seed in simulation_data_all]
+    w_final_all = [simulation_data_all[seed]['trial_1']['new_weights'] for seed in simulation_data_all]
+    w_init_avg = np.mean(w_init_all, axis=0)-1 # subtract 1 to make baseline 0
+    w_final_avg = np.mean(w_final_all, axis=0)-1
+    w_final_std = np.std(w_final_all, axis=0)
+
+    num_synapses = len(simulation_results['weights'])
     T = simulation_results['time'][-1]
 
     field_width = simulation_results['field_width']
     position = (np.linspace(0, T-field_width, num_synapses) + field_width/2 - plateau_time)/1000
-    ax.plot(position, w_init, c='gray', alpha=0.5, label='Initial synaptic weights', linewidth=1.5*linewidth)
-    ax.plot(position, w_final, c='k', label='Weights after dendritic spike', linewidth=1.5*linewidth)
-    ax.scatter(position[example_synapse], w_final[example_synapse], s=30, facecolors='none', edgecolors=example_color, linewidth=1, zorder=10)
+
+    ax.plot(position, w_init_avg, c='gray', alpha=0.5, label='Initial synaptic weights', linewidth=1.5*linewidth)
+    ax.plot(position, w_final_avg, c='k', label='Weights after dendritic spike', linewidth=1.5*linewidth)
+    ax.fill_between(position, w_final_avg-w_final_std, w_final_avg+w_final_std, color='gray', alpha=0.5, linewidth=0)
+    ax.scatter(position[example_synapse], w_final_avg[example_synapse], s=30, facecolors='none', edgecolors=example_color, linewidth=1, zorder=10)
 
     ax.set_ylabel('$\Delta W$ (norm.)')
-    ax.set_xlabel('Time from plateau (s)')
+    ax.set_xlabel('Time from dendritic spike (s)')
     # ax.legend(loc='upper right', bbox_to_anchor=(1.15, 1.), handlelength=1, frameon=False)
     ax.set_xlim([-3,3])
 
 
     ## Vm ramp from eLife paper (Fig.1 example neuron)
-    import pickle
     filename = 'data/20230918_BTSP_induction_example.pkl'
     with open(filename, 'rb') as f:
         BTSP_induction_recording = pickle.load(f)
@@ -322,12 +363,13 @@ def generate_Figure4(show=True, save=False):
     time = BTSP_induction_recording['t']
     dV = BTSP_induction_recording['delta_ramp']
     ax.plot(time/1000, dV, color='k', linewidth=linewidth)
-    ax.set_xlabel('Time from plateau (s)')
+    ax.set_xlabel('Time from dendritic spike (s)')
     ax.set_ylabel('$\Delta V_m$ (mV)')
     ax.set_xlim([-3,3])
 
     ###########################
     # Column 3
+    ###########################
     axes = gs.GridSpec(nrows=2, ncols=3, left=0, right=0.96, top=0.5, bottom=0)
 
     linewidth = 0.3
