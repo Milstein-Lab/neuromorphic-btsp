@@ -1,5 +1,6 @@
 /.ipynb_checkpoints
 /sim_data
+/figures
 __pycache__/
 .idea/
 .DS_Store

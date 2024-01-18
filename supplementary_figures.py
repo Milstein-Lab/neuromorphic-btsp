@@ -325,8 +325,7 @@ def generate_supplementary_5(save):
 
     mm = 1 / 25.4 # convert mm to inches
     fig = plt.figure(figsize=(183*mm, 80*mm))
-    # fig, (ax1, ax2) = plt.subplots(1,2,figsize=(120*mm,50*mm))
-    axes = gs.GridSpec(nrows=2, ncols=3, left=0.08, right=0.95, top=0.95, bottom=0.1, wspace=0.4, hspace=0.5)
+    axes = gs.GridSpec(nrows=2, ncols=4, left=0.08, right=0.95, top=0.95, bottom=0.1, wspace=0.4, hspace=0.5)
 
     plt.rcParams.update({'font.size': 8,
                     'axes.spines.right': False,
@@ -355,30 +354,35 @@ def generate_supplementary_5(save):
     btsp_func = get_BTSP_function(Wmax, k_pot, k_dep, sig_pot, sig_dep)
 
     # Plot BTSP learning rule for different tau values
-    IS_reference_temp = 70.82
-    IS_min_temp = IS_reference_temp - 0.32 # reduce tau by ~25%
-    IS_max_temp = IS_reference_temp + 0.49 # increase tau by ~25%
+    IS_reference_temp = 70.82 # tau=0.44s
+    IS_min_temp = IS_reference_temp - 0.32 # reduce tau by ~25% -> 0.33s
+    IS_max_temp = IS_reference_temp + 0.49 # increase tau by ~25% -> 0.55s
 
-    ET_reference_temp = 74.34
-    ET_min_temp = ET_reference_temp - 1.01 # reduce tau by ~25%
-    ET_max_temp = ET_reference_temp + 1.32 # increase tau by ~25%
+    ET_reference_temp = 74.34 # tau=1.66s
+    ET_min_temp = ET_reference_temp - 1.01 # reduce tau by ~25% -> 1.245s
+    ET_max_temp = ET_reference_temp + 1.32 # increase tau by ~25% -> 2.075s
+
+    ET_tau = [1.245, 1.66, 2.075]
 
     ax1 = fig.add_subplot(axes[0,0])
-    ax2 = fig.add_subplot(axes[0,1])
-    for col,IS_temp in enumerate([IS_min_temp, IS_reference_temp, IS_max_temp]):
-        for ET_temp in [ET_min_temp, ET_reference_temp, ET_max_temp]:
-            plot_VO2_btsp_learning_rule_single(ax1, ax2, btsp_func, dwell_time=400, plateau_dur=300, lr=0.012, ET_temp=ET_temp, IS_temp=IS_temp, save=save)
+    # three different shades of red: light, medium, dark
+    colors = [(1,0.,0.), (1,0.4,0.3), (1,0.6,0.6)]
+    for column,ET_temp in enumerate([ET_min_temp, ET_reference_temp, ET_max_temp]):
+        ax2 = fig.add_subplot(axes[0,column+1])
+        ax2.set_title(f'ET tau={ET_tau[column]}s')
+        for c,IS_temp in enumerate([IS_min_temp, IS_reference_temp, IS_max_temp]):
+            plot_VO2_btsp_learning_rule_single(ax1, ax2, colors[c], btsp_func, dwell_time=400, plateau_dur=300, lr=0.012, ET_temp=ET_temp, IS_temp=IS_temp, save=save)
 
-    ax3 = fig.add_subplot(axes[1,0])
-    ax4 = fig.add_subplot(axes[1,1])
-    plot_linear_track_VO2_variability(ax3, ax4)
+    ax1 = fig.add_subplot(axes[1,0])
+    ax2 = fig.add_subplot(axes[1,1])
+    plot_linear_track_VO2_variability(ax1, ax2)
 
-    # if save:
-    #     fig.savefig('figures/0-Supplementary Figures/Supplementary_BTSP_heatmap.png',dpi=300)
-    #     fig.savefig('figures/0-Supplementary Figures/Supplementary_BTSP_heatmap.svg',dpi=300)
+    if save:
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_LIF_variability.png',dpi=300)
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_LIF_variability.svg',dpi=300)
 
 
-def plot_VO2_btsp_learning_rule_single(ax1, ax2, btsp_func, dwell_time, plateau_dur, lr, ET_temp, IS_temp, save=False):
+def plot_VO2_btsp_learning_rule_single(ax1, ax2, color, btsp_func, dwell_time, plateau_dur, lr, ET_temp, IS_temp, save=False):
     ''' Plot BTSP learning rule (dW vs time from plateau) 
     
     :param T: float, dwell time (s)
@@ -411,12 +415,14 @@ def plot_VO2_btsp_learning_rule_single(ax1, ax2, btsp_func, dwell_time, plateau_
     ET_min = 1/VO2_ET.insulatorR
     ET_max = 1/VO2_ET.metalR * 0.4
     ET = (ET-ET_min)/(ET_max-ET_min)
+    ET = np.minimum(ET, 1) # clip values to [0,1]
     ET = np.roll(ET, int(tmax/2))
 
     IS = np.array(VO2_IS.g_history)
     IS_min = 1/VO2_IS.insulatorR
     IS_max = 1/VO2_IS.metalR * 0.8
     IS = (IS-IS_min)/(IS_max-IS_min)
+    IS = np.minimum(IS, 1) # clip values to [0,1]
     IS = np.roll(IS, int(tmax/2))
     IS[0:int(tmax/2)] = 0 # zero values before the IS start
 
@@ -440,28 +446,31 @@ def plot_VO2_btsp_learning_rule_single(ax1, ax2, btsp_func, dwell_time, plateau_
         W += lr*dWdt
     dW = W - w_init
 
-    # Plot dW vs time from plateau
+    # Plot ET and IS traces
     ax = ax1
     time = np.arange(-tmax/2, tmax/2, dt)/1000
     ET[0:int(tmax/2)] = 0 # zero values before the ET start
     ax.plot(time, ET, c='b', label='Eligibility trace (ET)', alpha=0.3)
     ax.plot(time, IS, c='r', label='Instructive signal (IS)', alpha=0.3)
     ax.set_xlim([-5,10])
-    ax.set_ylim([-0.3,1.3])
+    ax.set_ylim([-0.2,1])
     ax.set_xlabel('Time from dendritic spike (s)')
     ax.set_ylabel('Signal amplitude')
     # ax.legend(loc='upper left', bbox_to_anchor=(0., 1.1), fontsize=8, frameon=False, ncol=1, handlelength=1)
     
+    # Plot dW vs time from plateau
     ax = ax2
     time = all_delta_t/1000
-    ax.plot(time, dW, label=f'ET temp.={ET_temp}', c='k', alpha=0.3)
+    ax.plot(time, dW, label=f'ET temp.={ET_temp}', c=color, alpha=0.8)
     ax.hlines(0, -5, 5, colors='gray', linestyles='dashed', alpha=0.3)
-    ax.vlines(0, -0.5, 2, colors='r', linestyles='dashed', alpha=0.3)
+    ax.vlines(0, -0.5, np.max(dW), colors='gray', linestyles='dashed', alpha=0.3)
 
     ax.set_xlabel('Time from dendritic spike (s)')
     ax.set_ylabel('$\Delta$ Weight')
     ax.set_xlim([-5,3])
-    ax.set_ylim([-0.5,2])
+    # ax.set_ylim([-0.4,2])
+    ax.set_ylim(bottom=-0.4)
+
     # ax.legend(loc='upper left', bbox_to_anchor=(0., 1.1), fontsize=8, frameon=False, ncol=1, handlelength=1)
 
 def plot_linear_track_VO2_variability(ax1, ax2):
@@ -474,10 +483,10 @@ def plot_linear_track_VO2_variability(ax1, ax2):
     else:
         simulation_data_all = {}
 
-    random_seeds = [12, 13, 14, 123, 42]
+    random_seeds = [12, 42, 4321 , 674, 974, 295, 2763, 809, 2349, 7862]
     for seed in random_seeds:
         if seed not in simulation_data_all:
-            print('Running simulation 1 for seed =', seed)
+            print('Running simulation for seed =', seed)
             if seed==12: # Include the example trace with no tau jitter
                 randomly_sample_tau = False
             else:
@@ -488,10 +497,11 @@ def plot_linear_track_VO2_variability(ax1, ax2):
                 pickle.dump(simulation_data_all, f)
 
     example_color = 'steelblue'
-    example_synapse = 20#6
+    example_synapse = 6
     linewidth = 1
     simulation_results = simulation_data_all[random_seeds[0]] # use first seed as example
 
+    ## ET and IS traces
     ax = ax1
     IS_all = []
     ET_all = []
@@ -517,6 +527,12 @@ def plot_linear_track_VO2_variability(ax1, ax2):
     ET_avg = np.mean(ET_all, axis=0)
     ET_std = np.std(ET_all, axis=0)
 
+    step_size = 10 # downsample to reduce output image size
+    time = time[::step_size]
+    IS_avg = IS_avg[::step_size]
+    IS_std = IS_std[::step_size]
+    ET_avg = ET_avg[::step_size]
+    ET_std = ET_std[::step_size]
     ax.plot(time, IS_avg, color='r', linewidth=linewidth, label='IS')
     ax.fill_between(time, IS_avg-IS_std, IS_avg+IS_std, color='r', alpha=0.5, linewidth=0)
     ax.plot(time, ET_avg, color=example_color, linewidth=linewidth, label='ET')
@@ -525,7 +541,7 @@ def plot_linear_track_VO2_variability(ax1, ax2):
     ax.set_ylabel('Signal amplitude')
     ax.set_xlabel('Time from dendritic spike (s)')
     ax.legend(loc='upper right', bbox_to_anchor=(0.9, 1.), handlelength=1, frameon=False, fontsize=6, handletextpad=0.5)
-    # ax.set_xlim([-3,3])
+    ax.set_xlim([-3,3])
 
     ## Weight update plot
     ax = ax2
@@ -539,7 +555,7 @@ def plot_linear_track_VO2_variability(ax1, ax2):
     T = simulation_results['time'][-1]
 
     field_width = simulation_results['field_width']
-    position = (np.linspace(0, T-field_width, num_synapses) + field_width/2 - plateau_time)/1000
+    position = (np.linspace(0, 6000, num_synapses) + field_width/2 - plateau_time)/1000
 
     ax.plot(position, w_init_avg, c='gray', alpha=0.5, label='Initial synaptic weights', linewidth=1.5*linewidth)
     ax.plot(position, w_final_avg, c='k', label='Weights after dendritic spike', linewidth=1.5*linewidth)
@@ -549,12 +565,12 @@ def plot_linear_track_VO2_variability(ax1, ax2):
     ax.set_ylabel('$\Delta W$ (norm.)')
     ax.set_xlabel('Time from dendritic spike (s)')
     # ax.legend(loc='upper right', bbox_to_anchor=(1.15, 1.), handlelength=1, frameon=False)
-    # ax.set_xlim([-3,3])
+    ax.set_xlim([-3,3])
 
 
 
 if __name__ == '__main__':
-    save = False
+    save = True
     update_plot_defaults()
 
     # generate_Supplementary1(save)
