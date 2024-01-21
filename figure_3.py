@@ -147,6 +147,7 @@ def generate_Figure3(show=False, save=False):
     # titles = [f'Soma (fasrtVO$_{2}$ temp. = {temperatures[0]} C)', f'Dendrite (VO$_{2}$ temp. = {temperatures[1]} C)']
     example_colors = [['#FF6754', '#2D93DC'], ['#FF7F00', '#984EA3']]
     for col, VO2_temp in enumerate(temperatures):
+        # np.random.seed(42)
         simulation_results = VO2_LIF_simulation(VO2_temp, num_synapses=10, firing_rate=30, VO2_pulse_dur=pulsewidth[col])
 
         ax = axes[0,col]
@@ -195,7 +196,8 @@ def generate_Figure3(show=False, save=False):
 
     if save:
         fig.savefig('figures/Fig3-spiking_VO2/spiking_VO2_plots.svg', transparent=True, bbox_inches='tight', dpi=300)
+        fig.savefig('figures/Fig3-spiking_VO2/spiking_VO2_plots.png', transparent=True, bbox_inches='tight', dpi=300)
 
 
 if __name__ == '__main__':
-    generate_Figure3(show=True, save=False)
+    generate_Figure3(show=True, save=True)
