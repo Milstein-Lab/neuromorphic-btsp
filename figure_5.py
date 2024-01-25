@@ -56,8 +56,7 @@ def generate_Figure5(show=True, save=False):
     axes = gs.GridSpec(nrows=4, ncols=3, left=0.01, right=0.59, top=grid_top, bottom=grid_bottom, wspace=0.06, hspace=0.05)
 
     # 5x6 environment with simple wall
-    # filename = 'Figure4_grid_simulations_56_simple_seed.pkl'
-    filename = 'Figure4_grid_simulations_56_simple_seed_new_1clipped_2.pkl'
+    filename = 'Figure4_grid_simulations_56_simple_seed_1clipped.pkl'
 
     learning_rules = ['TD', 'Hebb', 'BTSP', 'accelerated_BTSP']
     common_seed = True

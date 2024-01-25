@@ -7,13 +7,14 @@ import os
 
 from utils import update_plot_defaults, get_scaled_sigmoid, get_BTSP_function, Volatile_Resistor
 from figure_4 import VO2_LIF_BTSP_simulation
+from figure_5 import GridWorld, Agent, RL_run_loop, deterministic_policy
 
 ########################################################################################################################
 # Supplementary Figures
 ########################################################################################################################
 
 def generate_Supplementary1(save):
-    # Plot heatmap for BTSP rule
+    """Plot heatmap for BTSP rule"""
 
     # BTSP parameters from (Milstein et al., 2021, eLife) Fig.7
     sig_pot = get_scaled_sigmoid(slope=4.405, threshold=0.415)
@@ -24,8 +25,7 @@ def generate_Supplementary1(save):
     btsp_func = get_BTSP_function(Wmax, k_pot, k_dep, sig_pot, sig_dep)
     plot_VO2_btsp_learning_rule(btsp_func, dwell_time=400, plateau_dur=300, lr=0.012, ET_temp=74.34, IS_temp=70.82, save=save)
 
-
-def plot_VO2_btsp_learning_rule(btsp_func, dwell_time, plateau_dur, lr, ET_temp, IS_temp, save=False):
+def plot_VO2_btsp_learning_rule(btsp_func, dwell_time, plateau_dur, lr, ET_temp, IS_temp, ET_scale=0.4, IS_scale=0.8, save=False):
     ''' Plot BTSP learning rule (dW vs time from plateau) 
     
     :param T: float, dwell time (s)
@@ -58,17 +58,18 @@ def plot_VO2_btsp_learning_rule(btsp_func, dwell_time, plateau_dur, lr, ET_temp,
         VO2_IS.time_step()
     ET = np.array(VO2_ET.g_history)
     ET_min = 1/VO2_ET.insulatorR
-    ET_max = 1/VO2_ET.metalR * 0.4
+    ET_max = 1/VO2_ET.metalR * ET_scale
     ET = (ET-ET_min)/(ET_max-ET_min)
     ET = np.roll(ET, int(tmax/2))
-
+    ET = np.minimum(ET, 1) # clip values to [0,1]
 
     IS = np.array(VO2_IS.g_history)
     IS_min = 1/VO2_IS.insulatorR
-    IS_max = 1/VO2_IS.metalR * 0.8
+    IS_max = 1/VO2_IS.metalR * IS_scale
     IS = (IS-IS_min)/(IS_max-IS_min)
     IS = np.roll(IS, int(tmax/2))
     IS[0:int(tmax/2)] = 0 # zero values before the IS start
+    IS = np.minimum(IS, 1) # clip values to [0,1]
 
     # print(f"ET min: {ET.min()}, ET max: {ET.max()}")
     # print(f"IS min: {IS.min()}, IS max: {IS.max()}")
@@ -108,7 +109,7 @@ def plot_VO2_btsp_learning_rule(btsp_func, dwell_time, plateau_dur, lr, ET_temp,
     # ax.set_ylim([1,3])
     ax.set_xlabel('Time from dendritic spike (s)')
     ax.set_ylabel('Initial weight')
-    ax.set_title('BTSP learning rule')
+    # ax.set_title('BTSP learning rule')
 
     ax = axes[1]
     time = np.arange(-tmax/2, tmax/2, dt)/1000
@@ -116,6 +117,7 @@ def plot_VO2_btsp_learning_rule(btsp_func, dwell_time, plateau_dur, lr, ET_temp,
     ax.plot(time, ET, c='b', label='Eligibility trace (ET)')
     ax.plot(time, IS, c='r', label='Instructive signal (IS)')
     ax.set_xlim([-5,10])
+    ax.set_ylim([-0.2,1])
     ax.set_xlabel('Time from dendritic spike (s)')
     ax.set_ylabel('Signal amplitude')
     ax.legend(loc='upper left', bbox_to_anchor=(0., 1.1), fontsize=8, frameon=False, ncol=1, handlelength=1)
@@ -198,7 +200,6 @@ def generate_Supplementary2(save):
     if save:
         fig.savefig('figures/0-Supplementary Figures/Supplementary_Rrelaxation.png',dpi=300)
         fig.savefig('figures/0-Supplementary Figures/Supplementary_Rrelaxation.svg',dpi=300)
-    
 
 def VO2_test_pulse(dt, T, stim_time, temperature):
     '''
@@ -317,10 +318,7 @@ def generate_Supplementary4(save):
         fig.savefig('figures/0-Supplementary Figures/Supplementary_multiVO2.svg',dpi=300)
 
 
-# def generate_supplementary_LIFdendrite():
-
-
-def generate_supplementary_5(save):
+def generate_Supplementary5(save):
     '''Plot simulations of VO2 variability (jitter tau values)'''
 
     mm = 1 / 25.4 # convert mm to inches
@@ -355,7 +353,7 @@ def generate_supplementary_5(save):
 
     # Plot BTSP learning rule for different tau values
     IS_reference_temp = 70.82 # tau=0.44s
-    IS_min_temp = IS_reference_temp - 0.32 # reduce tau by ~25% -> 0.33s
+    IS_min_temp = IS_reference_temp - 0.66 # reduce tau by ~25% -> 0.33s
     IS_max_temp = IS_reference_temp + 0.49 # increase tau by ~25% -> 0.55s
 
     ET_reference_temp = 74.34 # tau=1.66s
@@ -380,7 +378,6 @@ def generate_supplementary_5(save):
     if save:
         fig.savefig('figures/0-Supplementary Figures/Supplementary_LIF_variability.png',dpi=300)
         fig.savefig('figures/0-Supplementary Figures/Supplementary_LIF_variability.svg',dpi=300)
-
 
 def plot_VO2_btsp_learning_rule_single(ax1, ax2, color, btsp_func, dwell_time, plateau_dur, lr, ET_temp, IS_temp, save=False):
     ''' Plot BTSP learning rule (dW vs time from plateau) 
@@ -568,6 +565,67 @@ def plot_linear_track_VO2_variability(ax1, ax2):
     ax.set_xlim([-3,3])
 
 
+def generate_Supplementary6(save):
+    """Linear track SR with short-timescale BTSP rule"""
+
+    # BTSP parameters from (Milstein et al., 2021, eLife) Fig.7
+    sig_pot = get_scaled_sigmoid(slope=4.405, threshold=0.415)
+    sig_dep = get_scaled_sigmoid(slope=20.0, threshold=0.026)
+    k_dep = 0.425
+    k_pot = 1.1097
+    Wmax = 4.68
+    btsp_func = get_BTSP_function(Wmax, k_pot, k_dep, sig_pot, sig_dep)
+    plot_VO2_btsp_learning_rule(btsp_func, dwell_time=400, plateau_dur=300, lr=0.012, ET_temp=72.25, IS_temp=69.02, ET_scale=0.7, IS_scale=1., save=save)
+
+    mm = 1 / 25.4  # millimeters in inches
+    fig = plt.figure(figsize=(183*mm, 190*mm))
+    axes = gs.GridSpec(nrows=1, ncols=3, left=0.01, right=0.6, top=0.89, bottom=0.72, wspace=0.03)
+
+    ##################################################
+    ## 1. Linear track simulation
+    ##################################################
+    overwrite = False
+    filename = 'sim_data/supplementary_short_BTSP.pkl'
+    if os.path.exists(filename):
+        with open(filename, 'rb') as f:
+            RL_simulations_data = pickle.load(f)
+    else:
+        RL_simulations_data = {}
+
+    linear_track_size = 20
+    if "linear_track_SR" not in RL_simulations_data or overwrite:
+        print('Running linear track simulation')
+        environment = GridWorld(grid_size=(1, linear_track_size), wraparound=True)
+        dwell_time = 400
+        learning_rate = 0.012
+
+        agent = Agent(environment.num_states, ET_temp=72.25, IS_temp=69.02, ET_scaling_factor=0.7, IS_scaling_factor=1., learning_rule=btsp_func, policy=deterministic_policy)
+        RL_run_loop(agent, environment, learning_rule='BTSP', num_episodes=1, dwell_time=dwell_time, lr=learning_rate, max_steps=linear_track_size*linear_track_size)
+        RL_simulations_data['linear_track_SR'] = agent.M_history
+
+        agent = Agent(environment.num_states, ET_temp=74.34, IS_temp=70.82, learning_rule=btsp_func, policy=deterministic_policy)
+        RL_run_loop(agent, environment, learning_rule='TD', num_episodes=1, dwell_time=dwell_time, lr=learning_rate, max_steps=linear_track_size*linear_track_size)
+        RL_simulations_data['linear_track_SR_TD'] = agent.M_TD_history
+
+        with open(filename, 'wb') as f:
+            pickle.dump(RL_simulations_data, f)
+
+    # SR matrix
+    ax = fig.add_subplot(axes[0])
+    delta_M_BTSP = RL_simulations_data['linear_track_SR'][-1] - RL_simulations_data['linear_track_SR'][0]
+    im = ax.imshow(delta_M_BTSP, interpolation='nearest', aspect='equal', vmin=0, vmax=1)
+    ax.set_title('short BTSP')
+    ax.axis('off')
+    cax = fig.add_axes([ax.get_position().x1+0.01, ax.get_position().y0, 0.01, ax.get_position().height])
+    cbar = plt.colorbar(im, cax=cax)
+    cbar.set_label('$\Delta$ Weight', rotation=270, labelpad=8, fontsize=8)
+    cbar.ax.tick_params(labelsize=8)
+
+    if save:
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_short_BTSP.png',dpi=300)
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_short_BTSP.svg',dpi=300)
+
+
 
 if __name__ == '__main__':
     save = True
@@ -577,6 +635,7 @@ if __name__ == '__main__':
     # generate_Supplementary2(save)
     # generate_Supplementary3(save)
     # generate_Supplementary4(save)
-    generate_supplementary_5(save)
+    # generate_Supplementary5(save)
+    generate_Supplementary6(save)
 
     plt.show()
