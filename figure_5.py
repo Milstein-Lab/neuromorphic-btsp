@@ -6,8 +6,7 @@ import scipy
 from tqdm import tqdm
 import pickle
 
-from utils import update_plot_defaults, get_scaled_sigmoid, get_BTSP_function
-
+from utils import update_plot_defaults, get_scaled_sigmoid, get_BTSP_function, Volatile_Resistor
 
 
 ########################################################################################################################
@@ -17,7 +16,7 @@ from utils import update_plot_defaults, get_scaled_sigmoid, get_BTSP_function
 
 def generate_Figure5(show=True, save=False):
     mm = 1 / 25.4  # millimeters in inches
-    fig = plt.figure(figsize=(183*mm, 190*mm))
+    fig = plt.figure(figsize=(180*mm, 210*mm))
     
     # BTSP parameters from (Milstein et al., 2021, eLife) Fig.7
     sig_pot = get_scaled_sigmoid(slope=4.405, threshold=0.415)
@@ -30,8 +29,10 @@ def generate_Figure5(show=True, save=False):
     ##################################################
     ## 1. Linear track simulation
     ##################################################
-    axes = gs.GridSpec(nrows=1, ncols=3, left=0.01, right=0.6, top=0.89, bottom=0.72, wspace=0.03)
-    M_dict, size = simulate_linear_track_SR(btsp_func, overwrite=False)
+    overwrite = False
+
+    axes = gs.GridSpec(nrows=1, ncols=3, left=0.01, right=0.59, top=0.97, bottom=0.8, wspace=0.06)
+    M_dict, size = simulate_linear_track_SR(btsp_func, overwrite)
 
     # Plot learned successor weights
     ax1 = fig.add_subplot(axes[0])
@@ -40,64 +41,62 @@ def generate_Figure5(show=True, save=False):
     plot_linear_track_SR(M_dict, fig, ax1, ax2, ax3)
 
     # Plot quantification of SR correlation
-    axes = gs.GridSpec(nrows=1, ncols=1, left=0.73, right=0.98, top=0.91, bottom = 0.74)
+    axes = gs.GridSpec(nrows=1, ncols=1, left=0.73, right=0.98, top=0.96, bottom = 0.8)
     ax = fig.add_subplot(axes[0])
     plot_SR_correlation(M_dict, size, ax)
- 
+
 
     ##################################################
     ## 2. Gridworld simulation
     ##################################################
-    grid_top = 0.64
-    grid_bottom = 0.05
-    axes = gs.GridSpec(nrows=3, ncols=3, left=0.01, right=0.59, top=grid_top, bottom=grid_bottom, wspace=0.06, hspace=0.5)
+    overwrite = False
+
+    grid_top = 0.75
+    grid_bottom = 0.
+    axes = gs.GridSpec(nrows=4, ncols=3, left=0.01, right=0.59, top=grid_top, bottom=grid_bottom, wspace=0.06, hspace=0.05)
 
     # 5x6 environment with simple wall
-    filename = 'Figure4_grid_simulations_56_simple_seed.pkl'
+    # filename = 'Figure4_grid_simulations_56_simple_seed.pkl'
+    filename = 'Figure4_grid_simulations_56_simple_seed_new_1clipped_2.pkl'
+
+    learning_rules = ['TD', 'Hebb', 'BTSP', 'accelerated_BTSP']
     common_seed = True
     environment = GridWorld((5, 6), walls=(np.array([1, 2, 3]), 2), rewards=(1, 5), initial_state=(3, 1))
 
     random_seeds = [42, 12, 4321 , 674, 974, 295, 2763, 809, 2349, 7862]
-    # random_seeds = random_seeds[:3]
-    grid_simulations_data = simulate_gridworld_multiple_seeds(random_seeds, filename, common_seed, btsp_func, environment, overwrite=False)
+    # random_seeds = random_seeds[:6]
 
+    grid_simulations_data = simulate_gridworld_multiple_seeds(learning_rules, random_seeds, filename, common_seed, btsp_func, environment, overwrite)    
 
     # Plot example trajectories
     example_seed = 42
-    ax1 = plt.subplot(axes[0, 0])
-    ax2 = plt.subplot(axes[1, 0])
-    ax3 = plt.subplot(axes[2, 0])
-    trajectories = grid_simulations_data[example_seed]['trajectories']
-    plot_grid(ax1, environment, trajectories, learning_rule='TD', legend=True)
-    plot_grid(ax2, environment, trajectories, learning_rule='Hebb')
-    plot_grid(ax3, environment, trajectories, learning_rule='BTSP')
+    for i, rule in enumerate(learning_rules):
+        ax = plt.subplot(axes[i, 0])
+        plot_grid(ax, environment, grid_simulations_data[example_seed][rule]['trajectories'], legend=(i==0))
+        ax.set_title(f'{rule}')
 
-
-    # Plot example SR place fields (beginnning of learning)
-    M_history = grid_simulations_data[example_seed]['SR_weight_histories']
+    # Plot example SR place fields
     cell_nr = 11
     end_idx = -1 # end of the last trial
-    for i, rule in enumerate(['TD', 'Hebb', 'BTSP']):
+    for i, rule in enumerate(learning_rules):
         ax1 = plt.subplot(axes[i, 1])
         ax2 = plt.subplot(axes[i, 2])
-        start_idx = len(trajectories[rule][0]) # index at the end of trial 1
-        plot_SR_place_fields(fig, ax1, ax2, cell_nr, M_history, start_idx, end_idx, environment.grid_size, learning_rule=rule)
-
+        start_idx = len(grid_simulations_data[example_seed][rule]['trajectories'][0]) # index at the end of trial 1
+        plot_SR_place_fields(fig, ax1, ax2, cell_nr, grid_simulations_data[example_seed][rule]['SR_weight_history'], start_idx, end_idx, environment.grid_size)
 
     # Plot navigation summary quantifications
-    axes = gs.GridSpec(nrows=3, ncols=2, left=0.73, right=0.985, top=grid_top, bottom=grid_bottom, hspace=0.3, wspace=0.8)
-    trajectory_lengths = extract_trajectory_lengths(grid_simulations_data)
+    colors = ['k', 'gray', 'r', 'm']
 
+    axes = gs.GridSpec(nrows=4, ncols=2, left=0.73, right=0.985, top=grid_top, bottom=grid_bottom, hspace=0.5, wspace=0.8)
     ax = plt.subplot(axes[0, 0:2])
-    plot_pathlength_over_trials(ax, trajectory_lengths)
+    plot_pathlength_over_trials(ax, grid_simulations_data, learning_rules, colors)
 
     ax1 = plt.subplot(axes[1, 0])
     ax2 = plt.subplot(axes[1, 1])
-    plot_navigation_summary(ax1, ax2, trajectory_lengths)
+    plot_navigation_summary(ax1, ax2, grid_simulations_data, learning_rules, colors)
     
     ax = plt.subplot(axes[2, 0:2])
-    # plot_place_field_size(ax, M_history_all, trial_indexes, environment.grid_size)
-    plot_cumulative_reward(ax, trajectory_lengths)
+    plot_cumulative_reward(ax, grid_simulations_data, learning_rules, colors)
 
     if show:
         plt.show()
@@ -121,7 +120,7 @@ def simulate_linear_track_SR(btsp_func, overwrite=False):
         
         dwell_time = 400
         learning_rate = 0.012
-        
+
         agent = Agent(environment.num_states, ET_temp=74.34, IS_temp=70.82, learning_rule=btsp_func, policy=deterministic_policy)
         RL_run_loop(agent, environment, learning_rule='BTSP', num_episodes=1, dwell_time=dwell_time, lr=learning_rate, max_steps=linear_track_size*linear_track_size)
         M_dict['BTSP'] = agent.M_history
@@ -139,7 +138,7 @@ def simulate_linear_track_SR(btsp_func, overwrite=False):
 
     return M_dict, linear_track_size
 
-def simulate_gridworld_multiple_seeds(random_seeds, filename, common_seed, btsp_func, environment, overwrite=False):
+def simulate_gridworld_multiple_seeds(learning_rules, random_seeds, filename, common_seed, btsp_func, environment, overwrite=False):
     num_trials = 30
     max_steps = 60
 
@@ -150,43 +149,44 @@ def simulate_gridworld_multiple_seeds(random_seeds, filename, common_seed, btsp_
         grid_simulations_data = {}
 
     for seed in random_seeds:
+        np.random.seed(seed)
+        
         if seed not in grid_simulations_data:
-            print('Running simulation for seed = ', seed)
-            grid_simulations_data[seed] = simulate_gridworld(environment, btsp_func, seed, num_trials, max_steps, common_seed)
+            grid_simulations_data[seed] = {}
 
-            with open(f'sim_data/{filename}', 'wb') as f:
-                pickle.dump(grid_simulations_data, f)
+        for rule in learning_rules:
+            if rule not in grid_simulations_data[seed]:
+                if common_seed:
+                    np.random.seed(seed)
+                print(f'Running simulation for seed = {seed}, rule = {rule}')
+                trajectory_lengths, trajectories, SR_weight_history = simulate_gridworld(rule, environment, btsp_func, num_trials, max_steps)
+
+                grid_simulations_data[seed][rule] = {'trajectory_lengths': trajectory_lengths, 'trajectories': trajectories, 'SR_weight_history': SR_weight_history}
+
+                with open(f'sim_data/{filename}', 'wb') as f:
+                    pickle.dump(grid_simulations_data, f)
 
     return grid_simulations_data
 
-def simulate_gridworld(environment, btsp_func, seed, num_episodes, max_steps, common_seed=True):
-    trajectory_lengths = {}
-    trajectories = {}
-    SR_weight_histories = {}
+def simulate_gridworld(rule, environment, btsp_func, num_episodes, max_steps):
+    if rule == 'accelerated_BTSP':
+        print('Running accelerated BTSP simulation')
+        agent = Agent(environment.num_states, ET_temp=72.25, IS_temp=69.02, ET_scaling_factor=0.7, IS_scaling_factor=1., learning_rule=btsp_func, policy=epsilon_greedy_policy, policy_successor='BTSP', epsilon=0.2)
+        RL_run_loop(agent, environment, 'BTSP', num_episodes, dwell_time=400, lr=0.012, max_steps=max_steps, initial_state=environment.initial_state)
+    else:
+        agent = Agent(environment.num_states, ET_temp=74.34, IS_temp=70.82, learning_rule=btsp_func, policy=epsilon_greedy_policy, policy_successor=rule, epsilon=0.2)
+        RL_run_loop(agent, environment, rule, num_episodes, dwell_time=400, lr=0.012, max_steps=max_steps, initial_state=environment.initial_state)
 
-    np.random.seed(seed)
+    trajectory_lengths = [len(trajectory) for trajectory in agent.trajectories]
+    trajectories = agent.trajectories
+    if rule == 'BTSP' or rule == 'accelerated_BTSP':
+        SR_weight_history = agent.M_history
+    elif rule == 'TD':
+        SR_weight_history = agent.M_TD_history
+    elif rule == 'Hebb':
+        SR_weight_history = agent.M_hebb_history
 
-    learning_rules = ['TD', 'Hebb', 'BTSP']
-    for rule in learning_rules:
-        if common_seed:
-            np.random.seed(seed)
-        agent = Agent(environment.num_states, ET_temp=74.2, IS_temp=71.25,
-                      learning_rule=btsp_func, policy=epsilon_greedy_policy, policy_successor=rule, epsilon=0.2)
-        
-        RL_run_loop(agent, environment, rule, num_episodes, dwell_time=400, lr=0.012, max_steps=max_steps,
-                    initial_state=environment.initial_state)
-
-        trajectory_lengths[rule] = [len(trajectory) for trajectory in agent.trajectories]
-        trajectories[rule] = agent.trajectories
-        if rule == 'BTSP':
-            SR_weight_histories[rule] = agent.M_history
-        elif rule == 'TD':
-            SR_weight_histories[rule] = agent.M_TD_history
-        elif rule == 'Hebb':
-            SR_weight_histories[rule] = agent.M_hebb_history
-
-    return {'trajectory_lengths': trajectory_lengths, 'trajectories': trajectories,
-            'SR_weight_histories': SR_weight_histories}
+    return trajectory_lengths, trajectories, SR_weight_history
 
 def RL_run_loop(agent, environment, learning_rule='BTSP', num_episodes=1, max_steps=None, initial_state=(0,0), random_start=False, dwell_time=500, lr=1., field_size=1., field_type='binary'):
     """Run agent in environment for given number of episodes.
@@ -541,8 +541,7 @@ class GridWorld():
         plt.show()
 
 class Agent():
-    def __init__(self, num_states, ET_temp, IS_temp, learning_rule, policy, policy_successor='BTSP', epsilon=None):
-        
+    def __init__(self, num_states, ET_temp, IS_temp, learning_rule, policy, policy_successor='BTSP', epsilon=None, ET_scaling_factor=0.4, IS_scaling_factor=0.8):
         self.M = np.ones((num_states, num_states)) # Successor matrix
         self.M_TD = np.zeros((num_states, num_states)) # Successor matrix for TD
         self.M_hebb = np.zeros((num_states, num_states)) # Successor matrix for Hebbian/STDP-like short timescale rule
@@ -558,6 +557,8 @@ class Agent():
 
         self.ET_temp = ET_temp # Target tau = 1.66s
         self.IS_temp = IS_temp # Target tau = 0.44s
+        self.ET_scaling_factor = ET_scaling_factor
+        self.IS_scaling_factor = IS_scaling_factor
         self.ET = [Volatile_Resistor(dt=1, temperature=self.ET_temp, metalR=100) for i in range(num_states)] # Eligibility traces
         self.IS = [Volatile_Resistor(dt=1, temperature=self.IS_temp, metalR=100) for i in range(num_states)] # Instructive signals
         self.plateau_dur = 300 # (ms), Duration of plateau potential (width of IS rise)
@@ -615,14 +616,20 @@ class Agent():
     def compute_BTSP_update(self):
         # Convert from VO2_R to norm. eligibility signals
         g_ET_baseline = 1/self.ET[0].insulatorR
-        g_ET_peak = 1/self.ET[0].metalR *0.4
+        g_ET_peak = 1/self.ET[0].metalR * self.ET_scaling_factor
         ET = np.array([[1/VO2.R for VO2 in self.ET]])
         ET = (ET - g_ET_baseline)/(g_ET_peak-g_ET_baseline)
+        if np.max(ET) > 1:
+            # print(f'Warning: ET = {np.max(ET)}')
+            ET = np.minimum(ET, 1) # Clip values above 1
         
         g_IS_baseline = 1/self.IS[0].insulatorR
-        g_IS_peak = 1/self.IS[0].metalR *0.8
+        g_IS_peak = 1/self.IS[0].metalR * self.IS_scaling_factor
         IS = np.array([[1/VO2.R for VO2 in self.IS]])
         IS = (IS - g_IS_baseline)/(g_IS_peak-g_IS_baseline)
+        if np.max(IS) > 1:
+            # print(f'Warning: IS = {np.max(IS)}')
+            IS = np.minimum(IS, 1) # Clip values above 1
         
         self.ET_history.append(ET[0]) # 0 index removes empty dimension
         self.IS_history.append(IS[0])
@@ -779,15 +786,6 @@ def softmax_policy(prev_action, possible_actions, values, momentum=True):
     return action
 
 
-def extract_trajectory_lengths(grid_simulations_data):
-    trajectory_lengths = {}
-    for seed in grid_simulations_data:
-        for rule in grid_simulations_data[seed]['trajectory_lengths']:
-            if rule not in trajectory_lengths:
-                trajectory_lengths[rule] = {}
-            trajectory_lengths[rule][seed] = grid_simulations_data[seed]['trajectory_lengths'][rule]
-    return trajectory_lengths
-
 def extract_SR_weight_history(grid_simulations_data):
     M_history = {}
     for seed in grid_simulations_data:
@@ -807,7 +805,7 @@ def plot_linear_track_SR(M_dict, fig, ax1, ax2, ax3):
     ax = ax2
     delta_M_hebb = M_dict['Hebb'][-1] - M_dict['Hebb'][0]
     im = ax.imshow(delta_M_hebb, interpolation='nearest', aspect='equal', vmin=0, vmax=1)
-    ax.set_title('Hebbian')
+    ax.set_title('Hebb')
     ax.axis('off')
 
     ax = ax3
@@ -835,7 +833,7 @@ def plot_SR_correlation(M_dict, size, ax):
         correlations['BTSP'].append(np.corrcoef(M_BTSP.flatten(), final_SR.flatten())[0,1]**2)
 
     ax.plot(correlations['TD'], label='TD', color='k', linewidth=1)
-    ax.plot(correlations['Hebb'], label='Hebbian', color='gray', linewidth=1)
+    ax.plot(correlations['Hebb'], label='Hebb', color='gray', linewidth=1)
     ax.plot(correlations['BTSP'], label='BTSP', color='r', linewidth=1)
     ax.plot([0, len(correlations['BTSP'])], [1, 1], '--', color='k', linewidth=1)
     ax.plot([size,size], [0,0.85], '--', color='r', alpha=0.5, linewidth=1.5)
@@ -936,10 +934,8 @@ def plot_btsp_learning_rule(ax1, ax2, dwell_time, plateau_dur, btsp_func, ET_ris
     # ax2.legend()
 
 
-def plot_grid(ax, environment, trajectories, learning_rule, legend=False):
+def plot_grid(ax, environment, trajectories, legend=False):
     """Plot gridworld environment and trajectories on it."""
-
-    trajectories = trajectories[learning_rule]
 
     ax.imshow(environment.grid >= 0, interpolation='nearest', cmap='gray', vmin=-2, vmax=1)
 
@@ -976,6 +972,7 @@ def plot_grid(ax, environment, trajectories, learning_rule, legend=False):
         #         [state[0] + 1 + np.random.uniform(0., 0.3) for state in trajectories[0]], 'o-', c=[1, .3, .3], lw=0.5, ms=2, label='Trial 1', alpha=0.8)
         # ax.plot([state[1] + 1 - np.random.uniform(0., 0.3) for state in trajectories[1]],
         #         [state[0] + 1 - np.random.uniform(0., 0.3) for state in trajectories[1]], 'o-', c=[.3, .5, 1], lw=0.5, ms=2, label='Trial 2', alpha=0.8)
+
         # Plot first two trajectories in red and blue
         ax.plot([state[1] + 1 + np.random.uniform(0., 0.3) for state in trajectories[0]],
                 [state[0] + 1 + np.random.uniform(0., 0.3) for state in trajectories[0]], 'o-', c=[1, .0, .0], lw=0.5, ms=2, label='Trial 1', alpha=0.6)
@@ -988,17 +985,19 @@ def plot_grid(ax, environment, trajectories, learning_rule, legend=False):
     if legend:
         ax.legend(loc='lower left', bbox_to_anchor=(-0.05, -0.35), fontsize=8, frameon=False, ncol=1, labelspacing=0.2)
     ax.axis('off')
-    ax.set_title(f'{learning_rule}')
+    
 
-def plot_SR_place_fields(fig, ax1, ax2, cell_nr, M_history, start_idx, end_idx, grid_size, learning_rule):
-    M_start = M_history[learning_rule][start_idx] - M_history[learning_rule][0]
+def plot_SR_place_fields(fig, ax1, ax2, cell_nr, M_history, start_idx, end_idx, grid_size):
+    M_start = M_history[start_idx] - M_history[0]
     place_field = M_start[:, cell_nr].reshape(grid_size)
+    place_field = np.maximum(place_field, 0) # Clip negative values to 0
     im = ax1.imshow(place_field)
     ax1.set_title('Trial 1')
     ax1.axis('off')
 
-    M_end = M_history[learning_rule][end_idx] - M_history[learning_rule][0]
+    M_end = M_history[end_idx] - M_history[0]
     place_field = M_end[:, cell_nr].reshape(grid_size)
+    place_field = np.maximum(place_field, 0) # Clip negative values to 0
     im = ax2.imshow(place_field)
     ax2.set_title('Trial 30')
     ax2.axis('off')
@@ -1009,26 +1008,39 @@ def plot_SR_place_fields(fig, ax1, ax2, cell_nr, M_history, start_idx, end_idx, 
     cbar.set_label('$\Delta$ Weight', rotation=270, labelpad=8, fontsize=8)
     cbar.ax.tick_params(labelsize=8)
 
-def plot_navigation_summary(ax1, ax2, trajectory_lengths):
+def plot_pathlength_over_trials(ax, grid_simulations_data, learning_rules, colors):
     target_length = 10
-    learning_rules = ['TD', 'Hebb', 'BTSP']
-    colors = ['k', 'gray', 'r']
-    
-    # min_length = np.min([value for key, value in trajectory_lengths.items()])
-    # print(min_length)
+    ax.plot([0, 30], [target_length, target_length], '--', c='gray', alpha=0.5, linewidth=1)
 
+    for i, rule in enumerate(learning_rules):
+        lengths = []
+        for seed in grid_simulations_data:
+            lengths.append(grid_simulations_data[seed][rule]['trajectory_lengths'])
+        lengths = np.array(lengths) -1 # number of steps is number of states visited -1
+        trials = np.arange(lengths.shape[1])
+        ax.plot(trials, np.mean(lengths, axis=0), label=rule, linewidth=1, c=colors[i])
+        SEM = np.std(lengths, axis=0) / np.sqrt(lengths.shape[0])
+        ax.fill_between(trials, np.mean(lengths, axis=0) - SEM,
+                                    np.mean(lengths, axis=0) + SEM, alpha=0.3, color=colors[i])
+        
+    # ax.legend(loc='upper right', bbox_to_anchor=(1., 1), fontsize=8, frameon=False, ncol=3, labelspacing=0.01, handlelength=1.2)
+    ax.set_xlabel('Trial', labelpad=-1)
+    ax.set_ylabel('Number of steps to reward', labelpad=0)
+    ax.set_ylim(5,50)
+    ax.set_xlim(right=30)
+
+def plot_navigation_summary(ax1, ax2, grid_simulations_data, learning_rules, colors):
+    target_length = 10
     lengths = {rule: [] for rule in learning_rules}
     trials_to_optimal = {rule: [] for rule in learning_rules}
 
     for i, rule in enumerate(learning_rules):
-        for seed in trajectory_lengths[rule]:
-            lengths[rule].append(np.array(trajectory_lengths[rule][seed]))
+        for seed in grid_simulations_data:
+            lengths[rule].append(np.array(grid_simulations_data[seed][rule]['trajectory_lengths']))
         lengths[rule] = np.array(lengths[rule]) -1 # -1 because we don't count the initial state
 
         mean_lengths = np.mean(lengths[rule], axis=1)
-        ax1.boxplot(mean_lengths, positions=[i], widths=0.5, showfliers=False, patch_artist=True, boxprops=dict(facecolor=colors[i], alpha=0.5))
-        # ax1.bar(i, np.mean(lengths[rule]), label=rule, alpha=0.5, color=colors[i])
-        # ax1.scatter(np.ones(lengths[rule].shape[0]) * i, np.mean(lengths[rule], axis=1), color='k', alpha=0.3, s=5)
+        ax1.boxplot(mean_lengths, positions=[i], widths=0.5, showfliers=False, patch_artist=True, boxprops=dict(facecolor=colors[i], alpha=0.5), whis=(0, 100))
 
         for trajectory in lengths[rule]:
             if min(trajectory) <= target_length:
@@ -1037,9 +1049,7 @@ def plot_navigation_summary(ax1, ax2, trajectory_lengths):
                 trials_to_optimal[rule].append(len(trajectory))
         trials_to_optimal[rule] = np.array(trials_to_optimal[rule])
 
-        ax2.boxplot(trials_to_optimal[rule], positions=[i], widths=0.5, showfliers=False, patch_artist=True, boxprops=dict(facecolor=colors[i], alpha=0.5))
-        # ax2.bar(i, np.mean(trials_to_optimal[rule]), label=rule, alpha=0.5, color=colors[i])
-        # ax2.scatter(np.ones(trials_to_optimal[rule].shape[0]) * i, trials_to_optimal[rule], color='k', alpha=0.3, s=5)
+        ax2.boxplot(trials_to_optimal[rule], positions=[i], widths=0.5, showfliers=False, patch_artist=True, boxprops=dict(facecolor=colors[i], alpha=0.5), whis=(0, 100))
 
     ax1.set_ylabel('Avg steps to reward', labelpad=0)
     ax1.set_ylim(bottom=-1)
@@ -1055,50 +1065,32 @@ def plot_navigation_summary(ax1, ax2, trajectory_lengths):
     mean_lengths_Hebb = np.mean(lengths['Hebb'], axis=1)
     mean_lengths_TD = np.mean(lengths['TD'], axis=1)
     mean_lengths_BTSP = np.mean(lengths['BTSP'], axis=1)
+    mean_lengths_accelerated_BTSP = np.mean(lengths['accelerated_BTSP'], axis=1)
 
     print('Avg steps to reward comparison:')
-    print('Mean TD: ', np.mean(mean_lengths_TD))
-    print('Mean Hebb: ', np.mean(mean_lengths_Hebb))
-    print('Mean BTSP: ', np.mean(mean_lengths_BTSP))
+    print(f'Mean TD: {np.mean(mean_lengths_TD):.2f} ± {np.std(mean_lengths_TD):.2f}')
+    print(f'Mean Hebb: {np.mean(mean_lengths_Hebb):.2f} ± {np.std(mean_lengths_Hebb):.2f}')
+    print(f'Mean BTSP: {np.mean(mean_lengths_BTSP):.2f} ± {np.std(mean_lengths_BTSP):.2f}')
+    print(f'Mean accelerated BTSP: {np.mean(mean_lengths_accelerated_BTSP):.2f} ± {np.std(mean_lengths_accelerated_BTSP):.2f}')
     print('TD vs Hebb: p=', scipy.stats.ttest_ind(mean_lengths_TD, mean_lengths_Hebb)[1])
     print('TD vs BTSP: p=', scipy.stats.ttest_ind(mean_lengths_TD, mean_lengths_BTSP)[1])
     print('Hebb vs BTSP: p=', scipy.stats.ttest_ind(mean_lengths_Hebb, mean_lengths_BTSP)[1])
+    print('BTSP vs accelerated BTSP: p=', scipy.stats.ttest_ind(mean_lengths_BTSP, mean_lengths_accelerated_BTSP)[1])
 
     print('---------------------------------')
     print('Trials to learn short path comparison:')
-    print('Mean TD: ', np.mean(trials_to_optimal['TD']))
-    print('Mean Hebb: ', np.mean(trials_to_optimal['Hebb']))
-    print('Mean BTSP: ', np.mean(trials_to_optimal['BTSP']))
+    print(f'Mean TD: {np.mean(trials_to_optimal["TD"]):.2f} ± {np.std(trials_to_optimal["TD"]):.2f}')
+    print(f'Mean Hebb: {np.mean(trials_to_optimal["Hebb"]):.2f} ± {np.std(trials_to_optimal["Hebb"]):.2f}')
+    print(f'Mean BTSP: {np.mean(trials_to_optimal["BTSP"]):.2f} ± {np.std(trials_to_optimal["BTSP"]):.2f}')
+    print(f'Mean accelerated BTSP: {np.mean(trials_to_optimal["accelerated_BTSP"]):.2f} ± {np.std(trials_to_optimal["accelerated_BTSP"]):.2f}')
     print('TD vs Hebb: p=', scipy.stats.ttest_ind(trials_to_optimal['TD'], trials_to_optimal['Hebb'])[1])
     print('TD vs BTSP: p=', scipy.stats.ttest_ind(trials_to_optimal['TD'], trials_to_optimal['BTSP'])[1])
     print('Hebb vs BTSP: p=', scipy.stats.ttest_ind(trials_to_optimal['Hebb'], trials_to_optimal['BTSP'])[1])
-
-def plot_pathlength_over_trials(ax, trajectory_lengths):
-    target_length = 10
-    learning_rules = ['TD', 'Hebb', 'BTSP']
-    colors = ['k', 'gray', 'r']
-
-    ax.plot([0, 30], [target_length, target_length], '--', c='gray', alpha=0.5, linewidth=1)
-    for i, rule in enumerate(learning_rules):
-        lengths = []
-        for seed in trajectory_lengths[rule]:
-            lengths.append(trajectory_lengths[rule][seed])
-        lengths = np.array(lengths) -1 # number of steps is number of states visited -1
-        trials = np.arange(lengths.shape[1])
-        ax.plot(trials, np.mean(lengths, axis=0), label=rule, linewidth=1, c=colors[i])
-        SEM = np.std(lengths, axis=0) / np.sqrt(lengths.shape[0])
-        ax.fill_between(trials, np.mean(lengths, axis=0) - SEM,
-                                    np.mean(lengths, axis=0) + SEM, alpha=0.3, color=colors[i])
-        
-    # ax.legend(loc='upper right', bbox_to_anchor=(1., 1), fontsize=8, frameon=False, ncol=3, labelspacing=0.01, handlelength=1.2)
-    ax.set_xlabel('Trial', labelpad=-1)
-    ax.set_ylabel('Number of steps to reward', labelpad=0)
-    ax.set_ylim(bottom=5)
-    ax.set_xlim(right=30)
+    print('BTSP vs accelerated BTSP: p=', scipy.stats.ttest_ind(trials_to_optimal['BTSP'], trials_to_optimal['accelerated_BTSP'])[1])
 
 def plot_place_field_size(ax, M_history_all, trial_indexes, grid_size):
-    learning_rules = ['TD', 'Hebb', 'BTSP']
-    colors = ['k', 'gray', 'r']
+    learning_rules = ['TD', 'Hebb', 'BTSP', 'accelerated_BTSP']
+    colors = ['k', 'gray', 'r', 'm']
 
     
     for i, rule in enumerate(learning_rules):
@@ -1125,40 +1117,34 @@ def plot_place_field_size(ax, M_history_all, trial_indexes, grid_size):
     ax.set_ylim(bottom=0)
     ax.set_xlim(right=30)
 
-def plot_cumulative_reward(ax, trajectory_lengths):
-
-    learning_rules = ['TD', 'Hebb', 'BTSP']
-    labels = ['TD', 'Hebbian', 'BTSP']
-    colors = ['k', 'gray', 'r']
-
+def plot_cumulative_reward(ax, grid_simulations_data, learning_rules, colors):
+    cumulative_rewards = {rule: [] for rule in learning_rules}
     for i, rule in enumerate(learning_rules):
-        cumulative_rewards = []
-        for seed in trajectory_lengths[rule]:
-            lengths = np.array(trajectory_lengths[rule][seed])-1 # number of steps is number of states visited -1
+        for seed in grid_simulations_data:
+            lengths = np.array(grid_simulations_data[seed][rule]['trajectory_lengths'])-1 # number of steps is number of states visited -1
             total_num_steps = np.sum(lengths)
             rewards = np.zeros(total_num_steps)
             rewards[np.cumsum(lengths)-1] = 1
-            cumulative_rewards.append(np.cumsum(rewards))
+            cumulative_rewards[rule].append(np.cumsum(rewards))
 
-        min_length = min(len(rewards_seed) for rewards_seed in cumulative_rewards)
-        cumulative_rewards = [rewards_seed[:min_length] for rewards_seed in cumulative_rewards]
-        cumulative_rewards = np.array(cumulative_rewards)
-        steps = np.arange(cumulative_rewards.shape[1])
+        min_length = min(len(rewards_seed) for rewards_seed in cumulative_rewards[rule])
+        cumulative_rewards[rule] = [rewards_seed[:min_length] for rewards_seed in cumulative_rewards[rule]]
+        cumulative_rewards[rule] = np.array(cumulative_rewards[rule])
+        steps = np.arange(cumulative_rewards[rule].shape[1])
 
-        ax.plot(steps, np.mean(cumulative_rewards, axis=0), label=labels[i], linewidth=1, c=colors[i])
-        SEM = np.std(cumulative_rewards, axis=0) / np.sqrt(cumulative_rewards.shape[0])
-        ax.fill_between(steps, np.mean(cumulative_rewards, axis=0) - SEM,
-                                        np.mean(cumulative_rewards, axis=0) + SEM, alpha=0.3, color=colors[i])
+        ax.plot(steps, np.mean(cumulative_rewards[rule], axis=0), label=learning_rules[i], linewidth=1, c=colors[i])
+        SEM = np.std(cumulative_rewards[rule], axis=0) / np.sqrt(cumulative_rewards[rule].shape[0])
+        ax.fill_between(steps, np.mean(cumulative_rewards[rule], axis=0) - SEM,
+                                        np.mean(cumulative_rewards[rule], axis=0) + SEM, alpha=0.3, color=colors[i])
         
-    ax.legend(loc='center right', bbox_to_anchor=(0.5, 0.7), fontsize=8, frameon=False, handlelength=1, handletextpad=0.4)
+    ax.legend(loc='center right', bbox_to_anchor=(0.73, 0.7), fontsize=8, frameon=False, handlelength=1, handletextpad=0.4)
     ax.set_xlabel('Number of steps', labelpad=0)
     ax.set_ylabel('Cumulative reward', labelpad=0)
-    # ax.set_ylim(bottom=0)
-    ax.set_xlim(0,cumulative_rewards.shape[1])
-
+    ax.set_xlim(0,cumulative_rewards['BTSP'].shape[1])
+    ax.set_ylim(-2,30)
 
 
 
 if __name__ == '__main__':
     update_plot_defaults()
-    generate_Figure5(show=True, save=False)
+    generate_Figure5(show=True, save=True)
