@@ -2,14 +2,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def update_plot_defaults():
-    plt.rcParams.update({'font.size': 12,
+    plt.rcParams.update({'font.size': 8,
                      'axes.spines.right': False,
                      'axes.spines.top': False,
-                     'axes.linewidth':1.2,
-                     'xtick.major.size': 6,
-                     'xtick.major.width': 1.2,
-                     'ytick.major.size': 6,
-                     'ytick.major.width': 1.2,
+                     'axes.linewidth':1,
+                     'xtick.major.size': 3,
+                     'xtick.major.width': 1,
+                     'ytick.major.size': 3,
+                     'ytick.major.width': 1,
                      'legend.frameon': False,
                      'legend.handletextpad': 0.1,
                      'figure.figsize': [10.0, 3.0],
