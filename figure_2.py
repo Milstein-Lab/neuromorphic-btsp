@@ -8,6 +8,7 @@ import scipy
 
 from utils import update_plot_defaults, Volatile_Resistor
 
+
 def generate_Figure2(show=False, save=False):
     mm = 1 / 25.4  # millimeters in inches
     fig = plt.figure(figsize=(180 * mm, 190 * mm))
@@ -56,6 +57,7 @@ def generate_Figure2(show=False, save=False):
         plt.show()
 
 
+
 def fit_single_exponential(time, trace, tau_est=0.1, verbose=False):
     monoExp = lambda x,m,t,b: m * np.exp(-t * x) + b
 
@@ -72,10 +74,11 @@ def fit_single_exponential(time, trace, tau_est=0.1, verbose=False):
         print(f"R² = {rSquared}")
         print(f"tau = {tau}")
 
-    if rSquared < 0.9:
-        print("WARNING: Fit is poor. R² < 0.9")
+    # if rSquared < 0.9:
+    #     print("WARNING: Fit is poor. R² < 0.9")
 
     return tau
+
 
 def plot_RV_hysteresis(ax):
     RV_data = pd.read_csv('data/VO2_data_RvsV_transition.csv', header=34)
@@ -86,10 +89,9 @@ def plot_RV_hysteresis(ax):
 
     ax.scatter(V[209:], 1/R[209:], s=10, c='steelblue', linewidth=0)
     ax.scatter(V[:209], 1/R[:209], s=10, c='red', linewidth=0)
-    # ax.scatter(V, R, c=time_data, cmap='viridis', s=5)
     ax.set_xlabel('Voltage (V)')
-    # ax.set_ylabel('Resistance (kΩ)')
     ax.set_ylabel('Conductance (mS)')
+
 
 def plot_RI_hysteresis(ax):
     RV_data = pd.read_csv('data/VO2_data_RvsV_transition.csv', header=34)
@@ -100,9 +102,6 @@ def plot_RI_hysteresis(ax):
 
     ax.scatter(I[209:], R[209:], s=10)
     ax.scatter(I[:209], R[:209], s=10, c='r')
-    # im = ax.scatter(I, R, c=time_data, cmap='viridis', s=5)
-    # cbar = plt.colorbar(im, ax=ax2)
-    # cbar.set_label('Time', rotation=270, labelpad=5)
     ax.set_xlabel('Current (mA)')
     ax.set_ylabel('Resistance (kΩ)')
 
@@ -110,6 +109,7 @@ def plot_RI_hysteresis(ax):
     x = np.linspace(0,100,1000)
     y = lambda x: 5000*np.exp(-0.12*x)+220
     ax.plot(x,y(x)/1000, 'k--')
+
 
 def plot_RV_hysteresis_simulation(ax):
     dt = 100  # ms
@@ -132,21 +132,6 @@ def plot_RV_hysteresis_simulation(ax):
     ax.set_xlabel('V')
     ax.set_ylabel('Conductance (mS)')
 
-def plot_short_voltage_pulses(ax, Vsteps_data):
-    plot_ax = fig.add_axes([ax.get_position().x0,ax.get_position().y0+0.1,ax.get_position().width,0.7*ax.get_position().height])
-    stim_ax = fig.add_axes([ax.get_position().x0,ax.get_position().y0,ax.get_position().width,0.2*ax.get_position().height])
-    for pulse_amp in Vsteps_data:
-        time = Vsteps_data[pulse_amp]['SMU-1 Time (s)'][:1000]
-        V = Vsteps_data[pulse_amp]['SMU-1 Voltage (V)'][:1000]
-        I = Vsteps_data[pulse_amp]['SMU-1 Current (A)'][:1000]
-        R = Vsteps_data[pulse_amp]['SMU-1 Resistance (Ω)'][:1000]
-
-        plot_ax.plot(time, R, c=[.1,.1,.1], label=pulse_amp)
-        plot_ax.set_ylabel('Resistance (Ω)')
-        plot_ax.set_ylim([0, 1000])
-        stim_ax.plot(time, V, c=[.1,.1,.1], label=pulse_amp)
-        stim_ax.set_ylabel('V')
-        stim_ax.set_xticks([])
 
 def plot_relaxation_timescales(ax):
     slow_relaxation_data1 = pd.read_excel('data/VO2_data_currents.xlsx', header=0)  # Large current steps at 70C
@@ -167,7 +152,6 @@ def plot_relaxation_timescales(ax):
     g_fast = (g_fast - np.min(g_fast)) / (np.max(g_fast) - np.min(g_fast))
 
     ax.plot(time_fast-0.1, g_fast, label='64°C, 70mA', c='darkgray')
-    # ax.plot(time_ultraslow2-2.3, g_ultraslow2, label='64°C, 100mA', c='gray')
     ax.plot(time_slow-3.05, g_medium, label='70°C, 40mA', c='gray')
     ax.plot(time_slow-3.05, g_slow, label='70°C, 100mA', c='k')
 
@@ -175,6 +159,7 @@ def plot_relaxation_timescales(ax):
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Conductance [g] (norm.)')
     ax.legend(loc='upper right', bbox_to_anchor=(0.9, 1), fontsize=8, handlelength=0.7, handletextpad=0.4)
+
 
 def plot_tau_scatter(ax):
     pointsize = 6
@@ -238,6 +223,7 @@ def plot_tau_scatter(ax):
     ax.set_xlabel('Current (mA)')
     ax.set_ylabel('Conductance \ndecay tau (ms)',  labelpad=-9)
 
+
 def plot_relaxation_tree(ax):
     tree_data = pd.read_excel('data/relaxation_tree.xlsx', header=0)
     resistance_traces = np.array(tree_data.iloc[2:, 1:]).astype(float).T /1000
@@ -251,24 +237,6 @@ def plot_relaxation_tree(ax):
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('Resistance (kΩ)')
 
-    # fontsize = 6
-    # ax.text(0.5, 100, '2V', fontsize=fontsize)
-
-    # ax.text(1.25, 100, '2V', fontsize=fontsize)
-    # ax.text(1.25, 450, '0.7V', fontsize=fontsize)
-    # ax.text(1.25, 1100, '0.5V', fontsize=fontsize)
-    #
-    # ax.text(1.55, 100, '2V', fontsize=fontsize)
-    # ax.text(1.55, 950, '0.68V', fontsize=fontsize)
-    # ax.text(1.55, 1300, '0.53V', fontsize=fontsize)
-    #
-    # ax.text(2.05, 100, '2V', fontsize=fontsize)
-    # ax.text(2.05, 950, '0.75V', fontsize=fontsize)
-    # ax.text(2.05, 2250, '0.63V', fontsize=fontsize)
-    #
-    # ax.text(3.05, 100, '2V', fontsize=fontsize)
-    # ax.text(3.05, 1000, '0.8V', fontsize=fontsize)
-    # ax.text(3.05, 2300, '0.7V', fontsize=fontsize)
 
 def plot_short_steps(ax):
     Vsteps_data = {}
@@ -276,7 +244,6 @@ def plot_short_steps(ax):
         if file.endswith('.csv'):
             Vsteps_data[file] = pd.read_csv('data/short_Vpulses_data/' + file, header=0)
 
-    # ax2 = ax.twinx()
     for i, pulse_amp in enumerate(Vsteps_data):
         if i==0:
             time = Vsteps_data[pulse_amp]['SMU-1 Time (s)'][:300] - 0.01
@@ -284,13 +251,9 @@ def plot_short_steps(ax):
         g = 1 / R * 1000
         ax.plot(time, g, c=[.1, .1, .1], label=pulse_amp, linewidth=1)
 
-        # V = Vsteps_data[pulse_amp]['SMU-1 Voltage (V)'][500:800]
-        # ax2.plot(time, V, c=[.1,.1,.1], linewidth=0.1)
-        # ax2.set_ylim([0,100])
-
-    # ax.set_ylim([-0.01,0.009])
     ax.set_xlabel('Time (s)')
     ax.set_ylabel('g (mS)')
+
 
 def plot_relaxation_timescales_simulation(ax):
     dt = 1
@@ -326,6 +289,7 @@ def plot_relaxation_timescales_simulation(ax):
     ax.set_xlabel('Time (s)')
     ax.set_xlim([-0.1, 2.1])
     ax.set_ylabel('Conductance [g] (norm.)')
+
 
 def plot_tau_scatter_simulation(ax):
     dt = 0.1
@@ -383,6 +347,7 @@ def plot_tau_scatter_simulation(ax):
     ax.set_ylabel('Conductance \ndecay tau (ms)', labelpad=-9)
     ax.set_xlim([0, 102])
 
+
 def plot_VO2_dev2dev_variability_data(ax):
     # Device to device variability
     dev2dev_variability_data = pd.read_csv('data/dev2dev_gv_data.csv',header=2)
@@ -393,7 +358,6 @@ def plot_VO2_dev2dev_variability_data(ax):
     conductance_40mA = np.array(dev2dev_variability_data.iloc[:,31:40])
 
     all_traces = {'10 mA':conductance_10mA, '20 mA':conductance_20mA, '30 mA':conductance_30mA, '40 mA':conductance_40mA}
-    # colors = [[0.8,0.8,0.8], [0.6,0.6,0.6], [0.4,0.4,0.4], [0.2,0.2,0.2]]
     colors = ['c','m','b','k']
     for i, (stim_amplitude, traces) in enumerate(all_traces.items()):
         ax.plot(time, traces[:,0], label=stim_amplitude, color=colors[i], alpha=0.4, linewidth=0.5)
@@ -403,6 +367,7 @@ def plot_VO2_dev2dev_variability_data(ax):
     ax.set_ylabel('Conductance (mS)', labelpad=-1)
     ax.set_xlim(-0.1, 3)
     ax.legend()
+
 
 def plot_VO2_cyc2cyc_variability_data(ax2, ax1):
     cyc2cyc_variability_data = pd.read_excel('data/cycle-to-cycle-data-long.xlsx', sheet_name='decay time constant', header=2)
@@ -432,9 +397,6 @@ def plot_VO2_cyc2cyc_variability_data(ax2, ax1):
     ax2.set_xlabel('Time (s)')
     ax2.set_ylabel('Conductance (mS)', labelpad=-0.3)
     ax2.set_xlim(-0.1, 3)
-
-
-# def plot_VO2_variability_sim():
 
 
 
