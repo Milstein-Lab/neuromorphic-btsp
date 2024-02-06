@@ -10,8 +10,8 @@ from utils import update_plot_defaults, Volatile_Resistor
 
 def generate_Figure2(show=False, save=False):
     mm = 1 / 25.4  # millimeters in inches
-    fig = plt.figure(figsize=(183 * mm, 130 * mm))
-    axes = gs.GridSpec(nrows=3, ncols=3,
+    fig = plt.figure(figsize=(180 * mm, 190 * mm))
+    axes = gs.GridSpec(nrows=4, ncols=3,
                        left=0.05,right=0.98,
                        top=0.95, bottom = 0.08,
                        wspace=0.4, hspace=0.4)
@@ -40,6 +40,13 @@ def generate_Figure2(show=False, save=False):
 
     ax = fig.add_subplot(axes[2, 2])
     plot_tau_scatter_simulation(ax)
+
+    ax = fig.add_subplot(axes[3, 0])
+    plot_VO2_dev2dev_variability_data(ax)
+
+    ax1 = fig.add_subplot(axes[3, 1])
+    ax2 = fig.add_subplot(axes[3, 2])
+    plot_VO2_cyc2cyc_variability_data(ax1, ax2)
 
     if save:
         fig.savefig('figures/Fig2-VO2-properties/Figure2_plots.svg', dpi=300)
@@ -376,8 +383,63 @@ def plot_tau_scatter_simulation(ax):
     ax.set_ylabel('Conductance \ndecay tau (ms)', labelpad=-9)
     ax.set_xlim([0, 102])
 
+def plot_VO2_dev2dev_variability_data(ax):
+    # Device to device variability
+    dev2dev_variability_data = pd.read_csv('data/dev2dev_gv_data.csv',header=2)
+    time = dev2dev_variability_data.iloc[:,0]
+    conductance_10mA = np.array(dev2dev_variability_data.iloc[:,1:10])
+    conductance_20mA = np.array(dev2dev_variability_data.iloc[:,11:20])
+    conductance_30mA = np.array(dev2dev_variability_data.iloc[:,21:30])
+    conductance_40mA = np.array(dev2dev_variability_data.iloc[:,31:40])
+
+    all_traces = {'10 mA':conductance_10mA, '20 mA':conductance_20mA, '30 mA':conductance_30mA, '40 mA':conductance_40mA}
+    # colors = [[0.8,0.8,0.8], [0.6,0.6,0.6], [0.4,0.4,0.4], [0.2,0.2,0.2]]
+    colors = ['c','m','b','k']
+    for i, (stim_amplitude, traces) in enumerate(all_traces.items()):
+        ax.plot(time, traces[:,0], label=stim_amplitude, color=colors[i], alpha=0.4, linewidth=0.5)
+        ax.plot(time,traces[:,1:], color=colors[i], alpha=0.4, linewidth=0.5)
+
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Conductance (mS)', labelpad=-1)
+    ax.set_xlim(-0.1, 3)
+    ax.legend()
+
+def plot_VO2_cyc2cyc_variability_data(ax2, ax1):
+    cyc2cyc_variability_data = pd.read_excel('data/cycle-to-cycle-data-long.xlsx', sheet_name='decay time constant', header=2)
+    device_time_constants = np.array(cyc2cyc_variability_data.iloc[:,1:4])
+
+    mean_tau = np.mean(device_time_constants, axis=1)*1000
+    SD_tau = np.std(device_time_constants, axis=1)*1000
+    ax1.plot(mean_tau, '-o', c='k', markersize=2, linewidth=0.5)
+    ax1.fill_between(np.arange(len(mean_tau)), mean_tau-SD_tau, mean_tau+SD_tau, alpha=0.2, color='k')
+    ax1.set_ylabel('Decay time constant (ms)', labelpad=-0.3)
+    ax1.set_xlabel('Sample measurement time (min)')
+    ax1.set_ylim(0,60)
+
+    dev1 = pd.read_excel('data/cycle-to-cycle-data-long.xlsx', sheet_name='d1 10 mA', header=2)
+    dev2 = pd.read_excel('data/cycle-to-cycle-data-long.xlsx', sheet_name='d2 10 mA', header=2)
+    dev3 = pd.read_excel('data/cycle-to-cycle-data-long.xlsx', sheet_name='d3 10 mA', header=2)
+    time = dev1.iloc[:,0]
+
+    dev1_conductance = np.array(dev1.iloc[:,1:])
+    dev2_conductance = np.array(dev2.iloc[:,1:])
+    dev3_conductance = np.array(dev3.iloc[:,1:])
+
+    pastel_colors = ['lightgreen', 'steelblue', 'lightcoral']
+    ax2.plot(time, dev1_conductance, c=pastel_colors[0], alpha=0.5, linewidth=0.3)
+    ax2.plot(time, dev2_conductance, c=pastel_colors[1], alpha=0.5, linewidth=0.3)
+    ax2.plot(time, dev3_conductance, c=pastel_colors[2], alpha=0.5, linewidth=0.3)
+    ax2.set_xlabel('Time (s)')
+    ax2.set_ylabel('Conductance (mS)', labelpad=-0.3)
+    ax2.set_xlim(-0.1, 3)
+
+
+# def plot_VO2_variability_sim():
+
+
 
 if __name__=="__main__":
     update_plot_defaults()
-    generate_Figure2(show=True, save=False)
+    generate_Figure2(show=True, save=True)
+
 
