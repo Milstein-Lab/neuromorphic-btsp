@@ -15,18 +15,6 @@ def VO2_LIF_simulation(VO2_temp, num_synapses, firing_rate, VO2_pulse_dur):
     ## Setup
     ##############################################################
 
-    # Units
-    mV = 1e-3
-    kOhm = 1e3
-    MOhm = 1e6
-    pF = 1e-12
-    nF = 1e-9
-    uF = 1e-6
-    mF = 1e-3
-    mA = 1e-3
-    uA = 1e-6
-    nA = 1e-9
-
     # Simulation runtime parameters
     dt = 0.1  # time step (ms)
     T = 800   # simulation time (ms)
@@ -34,16 +22,13 @@ def VO2_LIF_simulation(VO2_temp, num_synapses, firing_rate, VO2_pulse_dur):
 
     input_stim_duration = 5 # ms
     V_low = 0.1 # V
-    # V_high = 1. # V
     VO2_stim_amp = 1. # mA
 
     spike_times = [poisson_spike_train(firing_rate, T/1e3, refractory_period=0.003)*1e3 for _ in range(num_synapses)]
 
-    # spike_times1 = np.array([50,100])
-    # spike_times2 = np.array([30,120, 200])
-    # spike_times = [spike_times1, spike_times2]
-
     # Neuron model parameters
+    kOhm = 1e3
+    uF = 1e-6
     VO2_cell = Volatile_Resistor(dt, temperature=VO2_temp, metalR=100, insulatorR=10*kOhm, stim_scaling=100)
     C = 1*uF
     V_th = 0.02 # V
