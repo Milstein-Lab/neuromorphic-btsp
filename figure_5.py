@@ -168,14 +168,6 @@ def simulate_gridworld_multiple_seeds(learning_rules, random_seeds, filename, bt
     else:
         grid_simulations_data = {}
 
-    # for seed in random_seeds:
-    #     print(seed)
-    #     del grid_simulations_data[seed]['simple_BTSP']
-    #     # del grid_simulations_data[seed]['accelerated_BTSP']
-    #     # del grid_simulations_data[seed]['BTSP']
-    #     with open(f'sim_data/{filename}', 'wb') as f:
-    #         pickle.dump(grid_simulations_data, f)
-
     for seed in random_seeds:
         if seed not in grid_simulations_data:
             grid_simulations_data[seed] = {}
@@ -196,14 +188,12 @@ def simulate_gridworld(seed, rule, environment, btsp_func, num_episodes, max_ste
     np.random.seed(seed)
     if rule == 'accelerated_BTSP':
         print('Running accelerated BTSP simulation')
-        agent = Agent(environment.num_states, ET_temp=70.68, IS_temp=70.82, ET_scaling_factor=1.3, learning_rule=btsp_func, policy=epsilon_greedy_policy, policy_successor='BTSP', epsilon=0.2) # ET/4
-        # agent = Agent(environment.num_states, ET_temp=72.25, IS_temp=70.82, ET_scaling_factor=0.7, learning_rule=btsp_func, policy=epsilon_greedy_policy, policy_successor='BTSP', epsilon=0.2) # ET/2
-        # agent = Agent(environment.num_states, ET_temp=72.25, IS_temp=69.02, ET_scaling_factor=0.7, IS_scaling_factor=1., learning_rule=btsp_func, policy=epsilon_greedy_policy, policy_successor='BTSP', epsilon=0.2) # ET/2 and IS/2
+        agent = Agent(environment.num_states, ET_temp=70.68, IS_temp=70.82, ET_scaling_factor=1.3, learning_rule=btsp_func, policy=epsilon_greedy_policy, policy_successor='BTSP', epsilon=0.2)
         RL_run_loop(agent, environment, 'BTSP', num_episodes, dwell_time=400, lr=0.012, max_steps=max_steps, initial_state=environment.initial_state, seed=seed)
     elif rule == 'simple_BTSP':
         print('Running simple linear BTSP simulation')
         agent = Agent(environment.num_states, ET_temp=74.34, IS_temp=70.82, learning_rule=get_simple_BTSP_function(), policy=epsilon_greedy_policy, policy_successor='BTSP', epsilon=0.2)
-        RL_run_loop(agent, environment, 'BTSP', num_episodes, dwell_time=400, lr=0.012/8, max_steps=max_steps, initial_state=environment.initial_state, seed=seed)
+        RL_run_loop(agent, environment, 'BTSP', num_episodes, dwell_time=400, lr=0.0015, max_steps=max_steps, initial_state=environment.initial_state, seed=seed)
     else:
         agent = Agent(environment.num_states, ET_temp=74.34, IS_temp=70.82, learning_rule=btsp_func, policy=epsilon_greedy_policy, policy_successor=rule, epsilon=0.2)
         RL_run_loop(agent, environment, rule, num_episodes, dwell_time=400, lr=0.012, max_steps=max_steps, initial_state=environment.initial_state, seed=seed)

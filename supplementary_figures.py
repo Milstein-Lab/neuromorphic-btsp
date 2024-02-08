@@ -13,8 +13,193 @@ from figure_5 import simulate_linear_track_SR, plot_linear_track_SR, plot_SR_cor
 # Supplementary Figures
 ########################################################################################################################
 
+def generate_Figure_S3(save):
+    '''IV relationship for device-to-device and cycle-to-cycle variability'''
+    dev2dev_variability_IV = pd.read_excel('data/device-to-device-data.xlsx', sheet_name='i-V', header=1)
+    dev2dev_IV_voltage = np.array(dev2dev_variability_IV.iloc[:,0::2])
+    dev2dev_IV_current = np.array(dev2dev_variability_IV.iloc[:,1::2])*1000
+
+    cyc2cyc_variability_IV = pd.read_excel('data/cycle-to-cycle-data.xlsx', sheet_name='i-V', header=2)
+    cyc2cyc_IV_voltage = np.array(cyc2cyc_variability_IV.iloc[:,0::2])
+    cyc2cyc_IV_current = np.array(cyc2cyc_variability_IV.iloc[:,1::2])*1000
+
+    mm = 1 / 25.4  # millimeters in inches
+    fig, (ax1, ax2)  = plt.subplots(1,2,figsize=(180*mm, 80*mm))
+
+    ax1.plot(dev2dev_IV_voltage, dev2dev_IV_current, c='k', alpha=0.3)
+    ax1.set_xlabel('Voltage (V)')
+    ax1.set_ylabel('Current (mA)')
+    ax1.set_title('Device-to-device variability')
+
+    ax2.plot(cyc2cyc_IV_voltage, cyc2cyc_IV_current, c='k', alpha=0.3)
+    ax2.set_xlabel('Voltage (V)')
+    ax2.set_ylabel('Current (mA)')
+    ax2.set_title('Cycle-to-cycle variability') 
+
+    plt.tight_layout()
+    if save:
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_variability_IV.png',dpi=300)
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_variability_IV.svg',dpi=300)
+
+
+########################################################################################################################
+
+def generate_Figure_S5(save):
+    '''VO2 model characterization (data vs sim for 70C relaxations)'''
+
+    mm = 1 / 25.4  # millimeters in inches    
+    fig = plt.figure(figsize=(180*mm, 100*mm))
+    axes = gs.GridSpec(nrows=1, ncols=3, bottom=0.6, top=0.9, left=0.08, right=0.98, wspace=0.4)
+
+    Isteps_data = pd.read_excel('data/VO2_data_currents.xlsx',header=0)
+
+    # Extract relevant variables 
+    data_time = np.array(Isteps_data['Time'][2:])
+    Isteps = np.array(Isteps_data.iloc[1][1::4])
+    voltage_traces = np.array(Isteps_data.iloc[2:,1::4]).T
+    resistance_traces = np.array(Isteps_data.iloc[2:,2::4]).T
+    current_traces = np.array(Isteps_data.iloc[2:,3::4]).T
+
+    sim_time, R_hist, controlI_hist = VO2_test_pulse(dt=10,T=10000, stim_time=(0,3000), temperature=70)
+    sim_time /= 1000
+
+    ax = fig.add_subplot(axes[0])
+    ax.plot(sim_time, controlI_hist, 'k', linewidth=1)
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Control current (mA)')
+    ax.set_title('Stimulation current')
+
+    ax = fig.add_subplot(axes[1])
+    for i,R in enumerate(resistance_traces):
+        ax.plot(data_time[100:10000], 1/R[100:10000]*1000, label=Isteps[i], c='k', linewidth=1)
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Conductance (mS)')
+    ax.set_title('VO2 data')
+
+    ax = fig.add_subplot(axes[2])
+    ax.plot(sim_time, 1/R_hist*1000, c='r', linewidth=1)
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Conductance (mS)')
+    ax.set_title('VO2 model simulation')
+
+
+    '''Plot properties of VO2 emulation'''
+    # Simulation runtime parameters
+    dt = 0.1  # time step (ms)
+    T = 300   # simulation time (ms)
+    time = np.arange(0., T, dt)
+    axes = gs.GridSpec(nrows=1, ncols=4, bottom=0.1, top=0.4, left=0.08, right=0.98, wspace=0.7)
+
+    line_color = [0.2,0.2,0.2]
+
+    g_volatile = Volatile_Resistor(dt, stim_scaling=100.)
+    controlI = np.linspace(0,1,1000)
+    R_eq = g_volatile.transfer_func(controlI*g_volatile.stim_scaling)
+    g_eq = 1/ R_eq
+
+    ax = fig.add_subplot(axes[0])   
+    ax.plot(controlI,R_eq, c=line_color)
+    ax.set_xlabel('Control current (mA)')
+    ax.set_ylabel('R_eq (Ω)')
+
+    ax = fig.add_subplot(axes[1])
+    ax.plot(controlI,1000*g_eq, c=line_color)
+    ax.set_xlabel('Control current (mA)')
+    ax.set_ylabel('Conductance_eq (mS)')
+
+    ax = fig.add_subplot(axes[2])
+    ax.plot(controlI,g_volatile.decay_tau(controlI=controlI*g_volatile.stim_scaling,temperature=70),c='r')
+    ax.set_title('Temp = 70 °C')
+    ax.set_xlabel('Control current (mA)')
+    ax.set_ylabel('Conductance\ndecay tau (ms)')
+
+    ax = fig.add_subplot(axes[3])
+    ax.plot(controlI,g_volatile.decay_tau(controlI=controlI*g_volatile.stim_scaling,temperature=64),c='b')
+    ax.set_title('Temp = 64 °C')
+    ax.set_xlabel('Control current (mA)')
+    ax.set_ylabel('Conductance\ndecay tau (ms)')
+
+    if save:
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_VO2_emulation_properties.png',dpi=300)
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_VO2_emulation_properties.svg',dpi=300)
+
+def VO2_test_pulse(dt, T, stim_time, temperature):
+    '''
+    Simulate a test pulse of a VO2 volatile resistor
+    :param dt: time step (ms)
+    :param T: simulation time (ms)
+    '''
+
+    time = np.arange(0., T, dt)
+
+    R_hist_ls = []
+    controlI_hist_ls = []
+    for pulseI in np.arange(20,110,10):
+        g_volatile = Volatile_Resistor(dt, temperature=temperature)
+        for t in time:
+            if t>stim_time[0] and t<stim_time[1]:
+                g_volatile.controlI = pulseI  
+            else:
+                g_volatile.controlI = 0
+            g_volatile.time_step()
+        R_hist_ls.append(g_volatile.R_history)
+        controlI_hist_ls.append(g_volatile.controlI_history)
+
+    R_hist = np.array(R_hist_ls).T
+    controlI_hist = np.array(controlI_hist_ls).T
+    return time, R_hist, controlI_hist
+
+########################################################################################################################
+
+def generate_Figure_S6(save):
+    '''Plot data from multiple simultaneous VO2 devices'''
+
+    mm = 1 / 25.4  # millimeters in inches
+    fig, ax = plt.subplots(1,1,figsize=(183*mm, 60*mm))
+
+    multiVO2_data = pd.read_csv('data/three_vo2_devices Run 24 2023-05-23T15.14.52.csv',header=0)
+    time = np.array(multiVO2_data['SMU-1 Time (s)'][2000:39_000])
+    current = np.array(multiVO2_data['SMU-1 Current (A)'][2000:39_000])
+    voltage = 0.1
+    time -= time[0]
+
+    g = current / voltage
+    omit = np.where(g < 0)[0]
+    th = 0.004
+    transition_start_indexes = [0]
+    jump = 6
+    i = jump
+    while i < len(g)-jump:
+        if i in omit:
+            i += 1
+        elif i + jump not in omit:
+            if (g[i+jump] - g[i] > th) and abs(g[i+jump+1] - g[i+jump]) < 0.002:
+                transition_start_indexes.append(i+jump+2)
+                i += jump
+            else:
+                i += 1
+        else:
+            i += 1
+    transition_start_indexes = np.array(transition_start_indexes)
+
+    g *= 1e3
+    ax.plot(time[transition_start_indexes][::3], g[transition_start_indexes][::3], c='r')
+    ax.plot(time[transition_start_indexes][1:][::3], g[transition_start_indexes][1:][::3], c='y')
+    ax.plot(time[transition_start_indexes][2:][::3], g[transition_start_indexes][2:][::3], c='k')
+    ax.set_ylim(bottom=0)
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Conductance (mS)')
+
+    plt.tight_layout()
+
+    if save:
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_multiVO2.png',dpi=300)
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_multiVO2.svg',dpi=300)
+
+########################################################################################################################
+
 def generate_Figure_S9(save):
-    """Plot heatmap for BTSP rule"""
+    """BTSP rule: heatmap and plasticity kernel"""
 
     # BTSP parameters from (Milstein et al., 2021, eLife) Fig.7
     sig_pot = get_scaled_sigmoid(slope=4.405, threshold=0.415)
@@ -152,258 +337,13 @@ def plot_VO2_btsp_learning_rule(axes, btsp_func, dwell_time, plateau_dur, lr, ET
     ax.set_ylim([-0.5,1.5])
     ax.legend(loc='upper left', bbox_to_anchor=(0., 1.1), fontsize=8, frameon=False, ncol=1, handlelength=1)
 
+########################################################################################################################
 
-def generate_Figure_S6(save):
-    '''Plot data vs sim for 70C relaxations'''
-    mm = 1 / 25.4  # millimeters in inches    
-    fig = plt.figure(figsize=(180*mm, 100*mm))
-    axes = gs.GridSpec(nrows=1, ncols=3, bottom=0.6, top=0.9, left=0.08, right=0.98, wspace=0.4)
-
-    Isteps_data = pd.read_excel('data/VO2_data_currents.xlsx',header=0)
-
-    # Extract relevant variables 
-    data_time = np.array(Isteps_data['Time'][2:])
-    Isteps = np.array(Isteps_data.iloc[1][1::4])
-    voltage_traces = np.array(Isteps_data.iloc[2:,1::4]).T
-    resistance_traces = np.array(Isteps_data.iloc[2:,2::4]).T
-    current_traces = np.array(Isteps_data.iloc[2:,3::4]).T
-
-    sim_time, R_hist, controlI_hist = VO2_test_pulse(dt=10,T=10000, stim_time=(0,3000), temperature=70)
-    sim_time /= 1000
-
-    ax = fig.add_subplot(axes[0])
-    ax.plot(sim_time, controlI_hist, 'k', linewidth=1)
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Control current (mA)')
-    ax.set_title('Stimulation current')
-
-    ax = fig.add_subplot(axes[1])
-    for i,R in enumerate(resistance_traces):
-        ax.plot(data_time[100:10000], 1/R[100:10000]*1000, label=Isteps[i], c='k', linewidth=1)
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Conductance (mS)')
-    ax.set_title('VO2 data')
-
-    ax = fig.add_subplot(axes[2])
-    ax.plot(sim_time, 1/R_hist*1000, c='r', linewidth=1)
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Conductance (mS)')
-    ax.set_title('VO2 model simulation')
-
-
-    '''Plot properties of VO2 emulation'''
-    # Simulation runtime parameters
-    dt = 0.1  # time step (ms)
-    T = 300   # simulation time (ms)
-    time = np.arange(0., T, dt)
-    axes = gs.GridSpec(nrows=1, ncols=4, bottom=0.1, top=0.4, left=0.08, right=0.98, wspace=0.7)
-
-    line_color = [0.2,0.2,0.2]
-
-    g_volatile = Volatile_Resistor(dt, stim_scaling=100.)
-    controlI = np.linspace(0,1,1000)
-    R_eq = g_volatile.transfer_func(controlI*g_volatile.stim_scaling)
-    g_eq = 1/ R_eq
-
-    ax = fig.add_subplot(axes[0])   
-    ax.plot(controlI,R_eq, c=line_color)
-    ax.set_xlabel('Control current (mA)')
-    ax.set_ylabel('R_eq (Ω)')
-
-    ax = fig.add_subplot(axes[1])
-    ax.plot(controlI,1000*g_eq, c=line_color)
-    ax.set_xlabel('Control current (mA)')
-    ax.set_ylabel('Conductance_eq (mS)')
-
-    ax = fig.add_subplot(axes[2])
-    ax.plot(controlI,g_volatile.decay_tau(controlI=controlI*g_volatile.stim_scaling,temperature=70),c='r')
-    ax.set_title('Temp = 70 °C')
-    ax.set_xlabel('Control current (mA)')
-    ax.set_ylabel('Conductance\ndecay tau (ms)')
-
-    ax = fig.add_subplot(axes[3])
-    ax.plot(controlI,g_volatile.decay_tau(controlI=controlI*g_volatile.stim_scaling,temperature=64),c='b')
-    ax.set_title('Temp = 64 °C')
-    ax.set_xlabel('Control current (mA)')
-    ax.set_ylabel('Conductance\ndecay tau (ms)')
-
-    if save:
-        fig.savefig('figures/0-Supplementary Figures/Supplementary_VO2_emulation_properties.png',dpi=300)
-        fig.savefig('figures/0-Supplementary Figures/Supplementary_VO2_emulation_properties.svg',dpi=300)
-
-def VO2_test_pulse(dt, T, stim_time, temperature):
-    '''
-    Simulate a test pulse of a VO2 volatile resistor
-    :param dt: time step (ms)
-    :param T: simulation time (ms)
-    '''
-
-    time = np.arange(0., T, dt)
-
-    R_hist_ls = []
-    controlI_hist_ls = []
-    for pulseI in np.arange(20,110,10):
-        g_volatile = Volatile_Resistor(dt, temperature=temperature)
-        for t in time:
-            if t>stim_time[0] and t<stim_time[1]:
-                g_volatile.controlI = pulseI  
-            else:
-                g_volatile.controlI = 0
-            g_volatile.time_step()
-        R_hist_ls.append(g_volatile.R_history)
-        controlI_hist_ls.append(g_volatile.controlI_history)
-
-    R_hist = np.array(R_hist_ls).T
-    controlI_hist = np.array(controlI_hist_ls).T
-    return time, R_hist, controlI_hist
-
-
-def generate_Figure_S11(save):
-    mm = 1 / 25.4  # millimeters in inches
-    fig = plt.figure(figsize=(180*mm, 210*mm))
-    colors = {'TD': 'k', 'Hebb': 'gray', 'BTSP': 'r', 'accelerated_BTSP': 'm', 'simple_BTSP': 'c', 'simple_BTSPu': 'c'}
-    learning_rules = ['TD', 'Hebb', 'BTSP', 'accelerated_BTSP', 'simple_BTSP']
-
-    # BTSP parameters from (Milstein et al., 2021, eLife) Fig.7
-    sig_pot = get_scaled_sigmoid(slope=4.405, threshold=0.415)
-    sig_dep = get_scaled_sigmoid(slope=20.0, threshold=0.026)
-    k_dep = 0.425
-    k_pot = 1.1097
-    Wmax = 4.68
-    btsp_func = get_BTSP_function(Wmax, k_pot, k_dep, sig_pot, sig_dep)
-
-    ##################################################
-    ## 0. BTSP learing rule variations
-    ##################################################
-
-    axes = gs.GridSpec(nrows=1, ncols=2, left=0.06, right=0.6, top=0.99, bottom=0.85, wspace=0.5)
-    ax1 = fig.add_subplot(axes[0])
-    ax2 = fig.add_subplot(axes[1])
-
-    plot_VO2_btsp_learning_rule((ax1,ax2), btsp_func, dwell_time=400, plateau_dur=300, lr=0.012, ET_temp=74.34, IS_temp=70.82, norm=True) # Regular ET
-    plot_VO2_btsp_learning_rule((ax1,ax2), btsp_func, dwell_time=400, plateau_dur=300, lr=0.012, ET_temp=70.68, ET_scale=1.1, IS_temp=70.82, norm=True) #ET/4
-
-    btsp_func = get_simple_BTSP_function()
-    plot_VO2_btsp_learning_rule((ax1,ax2), btsp_func, dwell_time=400, plateau_dur=300, lr=0.0015, ET_temp=74.34, IS_temp=70.82, norm=True)
-
-
-    ##################################################
-    ## 1. Linear track simulation
-    ##################################################
-    overwrite = False
-    filename = 'Figure5_linear_track_SR_matrices.pkl'
-
-    M_dict, size = simulate_linear_track_SR(filename, btsp_func, overwrite)
-
-    # Plot learned successor weights
-    axes = gs.GridSpec(nrows=1, ncols=2, left=0.06, right=0.5, top=0.78, bottom=0.62, wspace=0.06)
-    ax1 = fig.add_subplot(axes[0])
-    ax2 = fig.add_subplot(axes[1])
-    plot_linear_track_SR(M_dict, learning_rules[3:], fig, (ax1, ax2))
-
-    # Plot quantification of SR correlation
-    axes = gs.GridSpec(nrows=1, ncols=1, left=0.7, right=0.99, top=0.78, bottom=0.62)
-    ax = fig.add_subplot(axes[0])
-    plot_SR_correlation(M_dict, learning_rules[2:], size, ax, colors)
-
-
-    ##################################################
-    ## 2. Gridworld simulation
-    ##################################################
-    overwrite = False
-    filename = 'Figure6_norect_1wi_ET4_round3.pkl'
-    random_seeds = [42, 12, 4321, 674, 974, 295, 2763, 809, 2349, 7862]
-
-    environment = GridWorld((5, 6), walls=(np.array([1, 2, 3]), 2), rewards=(1, 5), initial_state=(3, 1)) # 5x6 environment with simple wall
-    grid_simulations_data = simulate_gridworld_multiple_seeds(learning_rules, random_seeds, filename, btsp_func, environment, overwrite)    
-
-    # Plot example trajectories
-    axes = gs.GridSpec(nrows=2, ncols=3, left=0.01, right=0.6, top=0.55, bottom=0.22, wspace=0.06)
-    example_seed = 42
-    for i, rule in enumerate(learning_rules[3:]):
-        ax = fig.add_subplot(axes[i, 0])
-        plot_grid(ax, environment, grid_simulations_data[example_seed][rule]['trajectories'], legend=(i==0))
-        ax.set_title(f'{rule}')
-    
-    # Plot example SR place fields
-    cell_nr = 11
-    end_idx = -1 # end of the last trial
-    for i, rule in enumerate(learning_rules[3:]):
-        ax1 = fig.add_subplot(axes[i, 1])
-        ax2 = fig.add_subplot(axes[i, 2])
-        trial_num = 1
-        start_idx = np.sum([len(grid_simulations_data[example_seed][rule]['trajectories'][i]) for i in range(trial_num)]) # index at the end of trial 0
-        plot_SR_place_fields(fig, ax1, ax2, cell_nr, grid_simulations_data[example_seed][rule]['SR_weight_history'], start_idx, end_idx, environment.grid_size)
-
-    # Plot navigation summary quantifications
-    axes = gs.GridSpec(nrows=1, ncols=6, left=0.05, right=0.99, top=0.2, bottom=0.05, hspace=0.5, wspace=1)
-    ax = fig.add_subplot(axes[0:2])
-    plot_pathlength_over_trials(ax, grid_simulations_data, random_seeds, learning_rules[2:], colors)
-
-    ax1 = fig.add_subplot(axes[2])
-    ax2 = fig.add_subplot(axes[3])
-    plot_navigation_summary(ax1, ax2, grid_simulations_data, random_seeds, learning_rules[2:], colors)
-    
-    ax = fig.add_subplot(axes[4:6])
-    plot_cumulative_reward(ax, grid_simulations_data, learning_rules[2:], colors)
-
-    if save:
-        fig.savefig('figures/0-Supplementary Figures/Supplementary_BTSP_variations.png',dpi=300)
-        fig.savefig('figures/0-Supplementary Figures/Supplementary_BTSP_variations.svg',dpi=300)
-
-
-
-def generate_Supplementary4(save):
-    '''Plot data from multiple simultaneous VO2 devices'''
-
-    mm = 1 / 25.4  # millimeters in inches
-    fig, ax = plt.subplots(1,1,figsize=(183*mm, 60*mm))
-
-    multiVO2_data = pd.read_csv('data/three_vo2_devices Run 24 2023-05-23T15.14.52.csv',header=0)
-    time = np.array(multiVO2_data['SMU-1 Time (s)'][2000:39_000])
-    current = np.array(multiVO2_data['SMU-1 Current (A)'][2000:39_000])
-    voltage = 0.1
-    time -= time[0]
-
-    g = current / voltage
-    omit = np.where(g < 0)[0]
-    th = 0.004
-    transition_start_indexes = [0]
-    jump = 6
-    i = jump
-    while i < len(g)-jump:
-        if i in omit:
-            i += 1
-        elif i + jump not in omit:
-            if (g[i+jump] - g[i] > th) and abs(g[i+jump+1] - g[i+jump]) < 0.002:
-                transition_start_indexes.append(i+jump+2)
-                i += jump
-            else:
-                i += 1
-        else:
-            i += 1
-    transition_start_indexes = np.array(transition_start_indexes)
-
-    g *= 1e3
-    ax.plot(time[transition_start_indexes][::3], g[transition_start_indexes][::3], c='r')
-    ax.plot(time[transition_start_indexes][1:][::3], g[transition_start_indexes][1:][::3], c='y')
-    ax.plot(time[transition_start_indexes][2:][::3], g[transition_start_indexes][2:][::3], c='k')
-    ax.set_ylim(bottom=0)
-    ax.set_xlabel('Time (s)')
-    ax.set_ylabel('Conductance (mS)')
-
-    plt.tight_layout()
-
-    if save:
-        fig.savefig('figures/0-Supplementary Figures/Supplementary_multiVO2.png',dpi=300)
-        fig.savefig('figures/0-Supplementary Figures/Supplementary_multiVO2.svg',dpi=300)
-
-
-def generate_Supplementary5(save):
+def generate_Figure_S10(save):
     '''Plot simulations of VO2 variability (jitter tau values)'''
 
     mm = 1 / 25.4 # convert mm to inches
-    fig = plt.figure(figsize=(183*mm, 80*mm))
+    fig = plt.figure(figsize=(180*mm, 80*mm))
     axes = gs.GridSpec(nrows=2, ncols=4, left=0.08, right=0.95, top=0.95, bottom=0.1, wspace=0.4, hspace=0.5)
 
     plt.rcParams.update({'font.size': 8,
@@ -645,9 +585,15 @@ def plot_linear_track_VO2_variability(ax1, ax2):
     # ax.legend(loc='upper right', bbox_to_anchor=(1.15, 1.), handlelength=1, frameon=False)
     ax.set_xlim([-3,3])
 
+########################################################################################################################
 
-def generate_Supplementary6(save):
-    """Linear track SR with short-timescale BTSP rule"""
+def generate_Figure_S11(save):
+    '''BTSP variants (accelerated tau and simplified BTSP) for RL linear track and gridworld simulations'''
+
+    mm = 1 / 25.4  # millimeters in inches
+    fig = plt.figure(figsize=(180*mm, 210*mm))
+    colors = {'TD': 'k', 'Hebb': 'gray', 'BTSP': 'r', 'accelerated_BTSP': 'm', 'simple_BTSP': 'c', 'simple_BTSPu': 'c'}
+    learning_rules = ['TD', 'Hebb', 'BTSP', 'accelerated_BTSP', 'simple_BTSP']
 
     # BTSP parameters from (Milstein et al., 2021, eLife) Fig.7
     sig_pot = get_scaled_sigmoid(slope=4.405, threshold=0.415)
@@ -656,70 +602,98 @@ def generate_Supplementary6(save):
     k_pot = 1.1097
     Wmax = 4.68
     btsp_func = get_BTSP_function(Wmax, k_pot, k_dep, sig_pot, sig_dep)
-    plot_VO2_btsp_learning_rule(btsp_func, dwell_time=400, plateau_dur=300, lr=0.012, ET_temp=72.25, IS_temp=69.02, ET_scale=0.7, IS_scale=1., save=save)
 
-    mm = 1 / 25.4  # millimeters in inches
-    fig = plt.figure(figsize=(183*mm, 190*mm))
-    axes = gs.GridSpec(nrows=1, ncols=3, left=0.01, right=0.6, top=0.89, bottom=0.72, wspace=0.03)
+    ##################################################
+    ## 0. BTSP learing rule variations
+    ##################################################
+
+    axes = gs.GridSpec(nrows=1, ncols=2, left=0.06, right=0.6, top=0.99, bottom=0.85, wspace=0.5)
+    ax1 = fig.add_subplot(axes[0])
+    ax2 = fig.add_subplot(axes[1])
+
+    plot_VO2_btsp_learning_rule((ax1,ax2), btsp_func, dwell_time=400, plateau_dur=300, lr=0.012, ET_temp=74.34, IS_temp=70.82, norm=True) # Regular ET
+    plot_VO2_btsp_learning_rule((ax1,ax2), btsp_func, dwell_time=400, plateau_dur=300, lr=0.012, ET_temp=70.68, ET_scale=1.1, IS_temp=70.82, norm=True) #ET/4
+
+    btsp_func = get_simple_BTSP_function()
+    plot_VO2_btsp_learning_rule((ax1,ax2), btsp_func, dwell_time=400, plateau_dur=300, lr=0.0015, ET_temp=74.34, IS_temp=70.82, norm=True)
+
 
     ##################################################
     ## 1. Linear track simulation
     ##################################################
     overwrite = False
-    filename = 'sim_data/supplementary_short_BTSP.pkl'
-    if os.path.exists(filename):
-        with open(filename, 'rb') as f:
-            RL_simulations_data = pickle.load(f)
-    else:
-        RL_simulations_data = {}
+    filename = 'Figure5_linear_track_SR_matrices.pkl'
 
-    linear_track_size = 20
-    if "linear_track_SR" not in RL_simulations_data or overwrite:
-        print('Running linear track simulation')
-        environment = GridWorld(grid_size=(1, linear_track_size), wraparound=True)
-        dwell_time = 400
-        learning_rate = 0.012
+    M_dict, size = simulate_linear_track_SR(filename, btsp_func, overwrite)
 
-        agent = Agent(environment.num_states, ET_temp=72.25, IS_temp=69.02, ET_scaling_factor=0.7, IS_scaling_factor=1., learning_rule=btsp_func, policy=deterministic_policy)
-        RL_run_loop(agent, environment, learning_rule='BTSP', num_episodes=1, dwell_time=dwell_time, lr=learning_rate, max_steps=linear_track_size*linear_track_size)
-        RL_simulations_data['linear_track_SR'] = agent.M_history
+    # Plot learned successor weights
+    axes = gs.GridSpec(nrows=1, ncols=2, left=0.06, right=0.5, top=0.78, bottom=0.62, wspace=0.06)
+    ax1 = fig.add_subplot(axes[0])
+    ax2 = fig.add_subplot(axes[1])
+    plot_linear_track_SR(M_dict, learning_rules[3:], fig, (ax1, ax2))
 
-        agent = Agent(environment.num_states, ET_temp=74.34, IS_temp=70.82, learning_rule=btsp_func, policy=deterministic_policy)
-        RL_run_loop(agent, environment, learning_rule='TD', num_episodes=1, dwell_time=dwell_time, lr=learning_rate, max_steps=linear_track_size*linear_track_size)
-        RL_simulations_data['linear_track_SR_TD'] = agent.M_TD_history
-
-        with open(filename, 'wb') as f:
-            pickle.dump(RL_simulations_data, f)
-
-    # SR matrix
+    # Plot quantification of SR correlation
+    axes = gs.GridSpec(nrows=1, ncols=1, left=0.7, right=0.99, top=0.78, bottom=0.62)
     ax = fig.add_subplot(axes[0])
-    delta_M_BTSP = RL_simulations_data['linear_track_SR'][-1] - RL_simulations_data['linear_track_SR'][0]
-    im = ax.imshow(delta_M_BTSP, interpolation='nearest', aspect='equal', vmin=0, vmax=1)
-    ax.set_title('short BTSP')
-    ax.axis('off')
-    cax = fig.add_axes([ax.get_position().x1+0.01, ax.get_position().y0, 0.01, ax.get_position().height])
-    cbar = plt.colorbar(im, cax=cax)
-    cbar.set_label('$\Delta$ Weight', rotation=270, labelpad=8, fontsize=8)
-    cbar.ax.tick_params(labelsize=8)
+    plot_SR_correlation(M_dict, learning_rules[2:], size, ax, colors)
+
+
+    ##################################################
+    ## 2. Gridworld simulation
+    ##################################################
+    overwrite = False
+    filename = 'Figure6_norect_1wi_ET4_round3.pkl'
+    random_seeds = [42, 12, 4321, 674, 974, 295, 2763, 809, 2349, 7862]
+
+    environment = GridWorld((5, 6), walls=(np.array([1, 2, 3]), 2), rewards=(1, 5), initial_state=(3, 1)) # 5x6 environment with simple wall
+    grid_simulations_data = simulate_gridworld_multiple_seeds(learning_rules, random_seeds, filename, btsp_func, environment, overwrite)    
+
+    # Plot example trajectories
+    axes = gs.GridSpec(nrows=2, ncols=3, left=0.01, right=0.6, top=0.55, bottom=0.22, wspace=0.06)
+    example_seed = 42
+    for i, rule in enumerate(learning_rules[3:]):
+        ax = fig.add_subplot(axes[i, 0])
+        plot_grid(ax, environment, grid_simulations_data[example_seed][rule]['trajectories'], legend=(i==0))
+        ax.set_title(f'{rule}')
+    
+    # Plot example SR place fields
+    cell_nr = 11
+    end_idx = -1 # end of the last trial
+    for i, rule in enumerate(learning_rules[3:]):
+        ax1 = fig.add_subplot(axes[i, 1])
+        ax2 = fig.add_subplot(axes[i, 2])
+        trial_num = 1
+        start_idx = np.sum([len(grid_simulations_data[example_seed][rule]['trajectories'][i]) for i in range(trial_num)]) # index at the end of trial 0
+        plot_SR_place_fields(fig, ax1, ax2, cell_nr, grid_simulations_data[example_seed][rule]['SR_weight_history'], start_idx, end_idx, environment.grid_size)
+
+    # Plot navigation summary quantifications
+    axes = gs.GridSpec(nrows=1, ncols=6, left=0.05, right=0.99, top=0.2, bottom=0.05, hspace=0.5, wspace=1)
+    ax = fig.add_subplot(axes[0:2])
+    plot_pathlength_over_trials(ax, grid_simulations_data, random_seeds, learning_rules[2:], colors)
+
+    ax1 = fig.add_subplot(axes[2])
+    ax2 = fig.add_subplot(axes[3])
+    plot_navigation_summary(ax1, ax2, grid_simulations_data, random_seeds, learning_rules[2:], colors)
+    
+    ax = fig.add_subplot(axes[4:6])
+    plot_cumulative_reward(ax, grid_simulations_data, learning_rules[2:], colors)
 
     if save:
-        fig.savefig('figures/0-Supplementary Figures/Supplementary_short_BTSP.png',dpi=300)
-        fig.savefig('figures/0-Supplementary Figures/Supplementary_short_BTSP.svg',dpi=300)
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_BTSP_variations.png',dpi=300)
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_BTSP_variations.svg',dpi=300)
 
-
+########################################################################################################################
 
 if __name__ == '__main__':
     save = True
     update_plot_defaults()
 
-    # generate_Supplementary1(save)
-    # generate_Supplementary4(save)
-    # generate_Supplementary5(save)
-    # generate_Supplementary6(save)
-
+    generate_Figure_S3(save)
+    # generate_Figure_S5(save)
     # generate_Figure_S6(save)
     # generate_Figure_S9(save)
-    generate_Figure_S11(save)
+    # generate_Figure_S10(save)
+    # generate_Figure_S11(save)
 
 
     plt.show()

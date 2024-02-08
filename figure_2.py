@@ -16,7 +16,6 @@ def generate_Figure2(show=False, save=False):
                        left=0.05,right=0.98,
                        top=0.95, bottom = 0.08,
                        wspace=0.4, hspace=0.4)
-    
 
     ax = fig.add_subplot(axes[0, 1])
     plot_RV_hysteresis(ax)
@@ -391,9 +390,10 @@ def plot_VO2_cyc2cyc_variability_data(ax2, ax1):
     dev3_conductance = np.array(dev3.iloc[:,1:])
 
     pastel_colors = ['lightgreen', 'steelblue', 'lightcoral']
-    ax2.plot(time, dev1_conductance, c=pastel_colors[0], alpha=0.5, linewidth=0.3)
-    ax2.plot(time, dev2_conductance, c=pastel_colors[1], alpha=0.5, linewidth=0.3)
-    ax2.plot(time, dev3_conductance, c=pastel_colors[2], alpha=0.5, linewidth=0.3)
+    ax2.plot(time, dev1_conductance, alpha=0.5, linewidth=0.3)
+    # ax2.plot(time, dev1_conductance, c=pastel_colors[0], alpha=0.5, linewidth=0.3)
+    # ax2.plot(time, dev2_conductance, c=pastel_colors[1], alpha=0.5, linewidth=0.3)
+    # ax2.plot(time, dev3_conductance, c=pastel_colors[2], alpha=0.5, linewidth=0.3)
     ax2.set_xlabel('Time (s)')
     ax2.set_ylabel('Conductance (mS)', labelpad=-0.3)
     ax2.set_xlim(-0.1, 3)
