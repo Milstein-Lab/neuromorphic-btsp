@@ -5,15 +5,15 @@ import matplotlib.gridspec as gs
 import pickle
 import os
 
-from utils import update_plot_defaults, get_scaled_sigmoid, get_BTSP_function, Volatile_Resistor
+from utils import update_plot_defaults, get_scaled_sigmoid, get_BTSP_function, get_simple_BTSP_function, Volatile_Resistor
 from figure_4 import VO2_LIF_BTSP_simulation
-from figure_5 import GridWorld, Agent, RL_run_loop, deterministic_policy
+from figure_5 import simulate_linear_track_SR, plot_linear_track_SR, plot_SR_correlation, simulate_gridworld_multiple_seeds, plot_grid, plot_SR_place_fields, plot_pathlength_over_trials, plot_navigation_summary, plot_cumulative_reward, GridWorld
 
 ########################################################################################################################
 # Supplementary Figures
 ########################################################################################################################
 
-def generate_Supplementary1(save):
+def generate_Figure_S9(save):
     """Plot heatmap for BTSP rule"""
 
     # BTSP parameters from (Milstein et al., 2021, eLife) Fig.7
@@ -23,9 +23,18 @@ def generate_Supplementary1(save):
     k_pot = 1.1097
     Wmax = 4.68
     btsp_func = get_BTSP_function(Wmax, k_pot, k_dep, sig_pot, sig_dep)
-    plot_VO2_btsp_learning_rule(btsp_func, dwell_time=400, plateau_dur=300, lr=0.012, ET_temp=74.34, IS_temp=70.82, save=save)
 
-def plot_VO2_btsp_learning_rule(btsp_func, dwell_time, plateau_dur, lr, ET_temp, IS_temp, ET_scale=0.4, IS_scale=0.8, save=False):
+    mm = 1 / 25.4 # convert mm to inches
+    fig, axes = plt.subplots(1,3,figsize=(180*mm,50*mm))
+
+    plot_VO2_btsp_learning_rule(axes, btsp_func, dwell_time=400, plateau_dur=300, lr=0.012, ET_temp=74.34, IS_temp=70.82) # Regular ET
+    plt.tight_layout()
+
+    if save:
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_BTSP_heatmap.png',dpi=300)
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_BTSP_heatmap.svg',dpi=300)
+
+def plot_VO2_btsp_learning_rule(axes, btsp_func, dwell_time, plateau_dur, lr, ET_temp, IS_temp, ET_scale=0.4, IS_scale=0.8, norm=False):
     ''' Plot BTSP learning rule (dW vs time from plateau) 
     
     :param T: float, dwell time (s)
@@ -97,21 +106,20 @@ def plot_VO2_btsp_learning_rule(btsp_func, dwell_time, plateau_dur, lr, ET_temp,
     dW = np.flip(dW, axis=0)
 
     # Plot dW vs time from plateau
-    mm = 1 / 25.4 # convert mm to inches
-    fig, axes = plt.subplots(1,3,figsize=(180*mm,50*mm))
+    i=0
+    if len(axes)==3:
+        ax = axes[0]
+        colorscale = np.max(np.abs(dW))
+        im = ax.imshow(dW, extent=[-5, 5, w_range[0], w_range[1]], aspect='auto', cmap='bwr', vmin=-colorscale, vmax=colorscale)
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.set_label('$\Delta$ Weight', rotation=270, labelpad=8, fontsize=8)
+        ax.set_xlim([-5,3])
+        # ax.set_ylim([1,3])
+        ax.set_xlabel('Time from dendritic spike (s)')
+        ax.set_ylabel('Initial weight')
+        i=1
 
-    ax = axes[0]
-    colorscale = np.max(np.abs(dW))
-    im = ax.imshow(dW, extent=[-5, 5, w_range[0], w_range[1]], aspect='auto', cmap='bwr', vmin=-colorscale, vmax=colorscale)
-    cbar = plt.colorbar(im, ax=ax)
-    cbar.set_label('$\Delta$ Weight', rotation=270, labelpad=8, fontsize=8)
-    ax.set_xlim([-5,3])
-    # ax.set_ylim([1,3])
-    ax.set_xlabel('Time from dendritic spike (s)')
-    ax.set_ylabel('Initial weight')
-    # ax.set_title('BTSP learning rule')
-
-    ax = axes[1]
+    ax = axes[0+i]
     time = np.arange(-tmax/2, tmax/2, dt)/1000
     ET[0:int(tmax/2)] = 0 # zero values before the ET start
     ax.plot(time, ET, c='b', label='Eligibility trace (ET)')
@@ -122,16 +130,18 @@ def plot_VO2_btsp_learning_rule(btsp_func, dwell_time, plateau_dur, lr, ET_temp,
     ax.set_ylabel('Signal amplitude')
     ax.legend(loc='upper left', bbox_to_anchor=(0., 1.1), fontsize=8, frameon=False, ncol=1, handlelength=1)
     
-    ax = axes[2]
+    ax = axes[1+i]
     time = all_delta_t/1000
     dW = np.flip(dW, axis=0)
-
-    w0_row = np.where(w_init>=1)[0][0]
-    ax.plot(time, dW[w0_row,:], label='W_init=1', c='k')
-    w05_row = np.where(w_init>=1.5)[0][0]
-    ax.plot(time, dW[w05_row,:], label='W_init=1.5', c='gray')
-    w1_row = np.where(w_init>=2)[0][0]
-    ax.plot(time, dW[w1_row,:], label='W_init=2', c='lightgray')
+    w1_row = np.where(w_init>=1)[0][0]
+    if norm:
+        ax.plot(time, dW[w1_row,:]/np.max(dW[w1_row,:]), label=f'ET temp.={ET_temp}')
+    else:
+        ax.plot(time, dW[w1_row,:], label='W_init=1', c='k')
+        w1p5_row = np.where(w_init>=1.5)[0][0]
+        ax.plot(time, dW[w1p5_row,:], label='W_init=1.5', c='gray')
+        w2_row = np.where(w_init>=2)[0][0]
+        ax.plot(time, dW[w2_row,:], label='W_init=2', c='lightgray')
 
     ax.hlines(0, -5, 5, colors='gray', linestyles='dashed', alpha=0.5)
     ax.vlines(0, -0.5, 1.5, colors='r', linestyles='dashed', alpha=0.5)
@@ -142,19 +152,12 @@ def plot_VO2_btsp_learning_rule(btsp_func, dwell_time, plateau_dur, lr, ET_temp,
     ax.set_ylim([-0.5,1.5])
     ax.legend(loc='upper left', bbox_to_anchor=(0., 1.1), fontsize=8, frameon=False, ncol=1, handlelength=1)
 
-    plt.tight_layout()
 
-    if save:
-        fig.savefig('figures/0-Supplementary Figures/Supplementary_BTSP_heatmap.png',dpi=300)
-        fig.savefig('figures/0-Supplementary Figures/Supplementary_BTSP_heatmap.svg',dpi=300)
-
-
-def generate_Supplementary2(save):
+def generate_Figure_S6(save):
     '''Plot data vs sim for 70C relaxations'''
-    # Plot data vs simulation 
-
     mm = 1 / 25.4  # millimeters in inches    
-    fig,ax = plt.subplots(1,3,figsize=(183*mm, 50*mm))
+    fig = plt.figure(figsize=(180*mm, 100*mm))
+    axes = gs.GridSpec(nrows=1, ncols=3, bottom=0.6, top=0.9, left=0.08, right=0.98, wspace=0.4)
 
     Isteps_data = pd.read_excel('data/VO2_data_currents.xlsx',header=0)
 
@@ -165,41 +168,68 @@ def generate_Supplementary2(save):
     resistance_traces = np.array(Isteps_data.iloc[2:,2::4]).T
     current_traces = np.array(Isteps_data.iloc[2:,3::4]).T
 
-
-    plot_nr = (1)
-    for i,R in enumerate(resistance_traces):
-        ax[plot_nr].plot(data_time[100:10000], 1/R[100:10000], label=Isteps[i], c='k', linewidth=1)
-    ax[plot_nr].set_xlabel('Time (s)')
-    ax[plot_nr].set_ylabel('R (Ω)')
-    # ax[plot_nr].set_xlim([1.,1.05])
-    # ax[plot_nr].set_ylim(top=1)
-    ax[plot_nr].set_title('VO2 data')
-
-    # plot_nr = (1,0)
-    # for i,I in enumerate(current_traces):
-    #     ax[plot_nr].plot(data_time, I*1000, label=Isteps[i], c='k')
-    # ax[plot_nr].set_xlabel('Time (s)')
-    # ax[plot_nr].set_ylabel('Control I (mA)')
-    # # ax[0,1].legend()
-
     sim_time, R_hist, controlI_hist = VO2_test_pulse(dt=10,T=10000, stim_time=(0,3000), temperature=70)
     sim_time /= 1000
-    plot_nr = (2)
-    ax[plot_nr].plot(sim_time, 1/R_hist, c='r', linewidth=1)
-    ax[plot_nr].set_xlabel('Time (ms)')
-    ax[plot_nr].set_ylabel('R (Ω)')
-    ax[plot_nr].set_title('VO2 model simulation')
 
-    plot_nr = 0
-    ax[plot_nr].plot(sim_time, controlI_hist, 'k', linewidth=1)
-    ax[plot_nr].set_xlabel('Time (s)')
-    ax[plot_nr].set_ylabel('Control I (mA)')
-    ax[plot_nr].set_title('Stimulation current')
-    plt.tight_layout()
+    ax = fig.add_subplot(axes[0])
+    ax.plot(sim_time, controlI_hist, 'k', linewidth=1)
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Control current (mA)')
+    ax.set_title('Stimulation current')
+
+    ax = fig.add_subplot(axes[1])
+    for i,R in enumerate(resistance_traces):
+        ax.plot(data_time[100:10000], 1/R[100:10000]*1000, label=Isteps[i], c='k', linewidth=1)
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Conductance (mS)')
+    ax.set_title('VO2 data')
+
+    ax = fig.add_subplot(axes[2])
+    ax.plot(sim_time, 1/R_hist*1000, c='r', linewidth=1)
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Conductance (mS)')
+    ax.set_title('VO2 model simulation')
+
+
+    '''Plot properties of VO2 emulation'''
+    # Simulation runtime parameters
+    dt = 0.1  # time step (ms)
+    T = 300   # simulation time (ms)
+    time = np.arange(0., T, dt)
+    axes = gs.GridSpec(nrows=1, ncols=4, bottom=0.1, top=0.4, left=0.08, right=0.98, wspace=0.7)
+
+    line_color = [0.2,0.2,0.2]
+
+    g_volatile = Volatile_Resistor(dt, stim_scaling=100.)
+    controlI = np.linspace(0,1,1000)
+    R_eq = g_volatile.transfer_func(controlI*g_volatile.stim_scaling)
+    g_eq = 1/ R_eq
+
+    ax = fig.add_subplot(axes[0])   
+    ax.plot(controlI,R_eq, c=line_color)
+    ax.set_xlabel('Control current (mA)')
+    ax.set_ylabel('R_eq (Ω)')
+
+    ax = fig.add_subplot(axes[1])
+    ax.plot(controlI,1000*g_eq, c=line_color)
+    ax.set_xlabel('Control current (mA)')
+    ax.set_ylabel('Conductance_eq (mS)')
+
+    ax = fig.add_subplot(axes[2])
+    ax.plot(controlI,g_volatile.decay_tau(controlI=controlI*g_volatile.stim_scaling,temperature=70),c='r')
+    ax.set_title('Temp = 70 °C')
+    ax.set_xlabel('Control current (mA)')
+    ax.set_ylabel('Conductance\ndecay tau (ms)')
+
+    ax = fig.add_subplot(axes[3])
+    ax.plot(controlI,g_volatile.decay_tau(controlI=controlI*g_volatile.stim_scaling,temperature=64),c='b')
+    ax.set_title('Temp = 64 °C')
+    ax.set_xlabel('Control current (mA)')
+    ax.set_ylabel('Conductance\ndecay tau (ms)')
 
     if save:
-        fig.savefig('figures/0-Supplementary Figures/Supplementary_Rrelaxation.png',dpi=300)
-        fig.savefig('figures/0-Supplementary Figures/Supplementary_Rrelaxation.svg',dpi=300)
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_VO2_emulation_properties.png',dpi=300)
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_VO2_emulation_properties.svg',dpi=300)
 
 def VO2_test_pulse(dt, T, stim_time, temperature):
     '''
@@ -228,48 +258,99 @@ def VO2_test_pulse(dt, T, stim_time, temperature):
     return time, R_hist, controlI_hist
 
 
-def generate_Supplementary3(save):
-    '''Plot properties of VO2 emulation'''
+def generate_Figure_S11(save):
+    mm = 1 / 25.4  # millimeters in inches
+    fig = plt.figure(figsize=(180*mm, 210*mm))
+    colors = {'TD': 'k', 'Hebb': 'gray', 'BTSP': 'r', 'accelerated_BTSP': 'm', 'simple_BTSP': 'c', 'simple_BTSPu': 'c'}
+    learning_rules = ['TD', 'Hebb', 'BTSP', 'accelerated_BTSP', 'simple_BTSP']
 
-    # Simulation runtime parameters
-    dt = 0.1  # time step (ms)
-    T = 300   # simulation time (ms)
-    time = np.arange(0., T, dt)
+    # BTSP parameters from (Milstein et al., 2021, eLife) Fig.7
+    sig_pot = get_scaled_sigmoid(slope=4.405, threshold=0.415)
+    sig_dep = get_scaled_sigmoid(slope=20.0, threshold=0.026)
+    k_dep = 0.425
+    k_pot = 1.1097
+    Wmax = 4.68
+    btsp_func = get_BTSP_function(Wmax, k_pot, k_dep, sig_pot, sig_dep)
 
-    line_color = [0.2,0.2,0.2]
+    ##################################################
+    ## 0. BTSP learing rule variations
+    ##################################################
 
-    mm = 1 / 25.4  # millimeters in inches    
-    fig,ax = plt.subplots(1,4,figsize=(183*mm, 60*mm))
+    axes = gs.GridSpec(nrows=1, ncols=2, left=0.06, right=0.6, top=0.99, bottom=0.85, wspace=0.5)
+    ax1 = fig.add_subplot(axes[0])
+    ax2 = fig.add_subplot(axes[1])
 
-    g_volatile = Volatile_Resistor(dt, stim_scaling=100)
-    controlI = np.linspace(0,1,1000)
-    R_eq = g_volatile.transfer_func(controlI*g_volatile.stim_scaling)
-    g_eq = 1/ R_eq
+    plot_VO2_btsp_learning_rule((ax1,ax2), btsp_func, dwell_time=400, plateau_dur=300, lr=0.012, ET_temp=74.34, IS_temp=70.82, norm=True) # Regular ET
+    plot_VO2_btsp_learning_rule((ax1,ax2), btsp_func, dwell_time=400, plateau_dur=300, lr=0.012, ET_temp=70.68, ET_scale=1.1, IS_temp=70.82, norm=True) #ET/4
 
-    ax[0].plot(controlI,R_eq, c=line_color)
-    ax[0].set_xlabel('Control current (mA)')
-    ax[0].set_ylabel('R$_{eq}$ (Ω)')
+    btsp_func = get_simple_BTSP_function()
+    plot_VO2_btsp_learning_rule((ax1,ax2), btsp_func, dwell_time=400, plateau_dur=300, lr=0.0015, ET_temp=74.34, IS_temp=70.82, norm=True)
 
-    ax[1].plot(controlI,g_eq, c=line_color)
-    ax[1].set_xlabel('Control current (mA)')
-    ax[1].set_ylabel('g$_{eq}$ (S)')
 
-    ax[2].plot(controlI,g_volatile.decay_tau(controlI=controlI*g_volatile.stim_scaling,temperature=70),c='r')
-    ax[2].set_title('Temp=70°C')
-    ax[2].set_xlabel('Control current (mA)')
-    ax[2].set_ylabel('g decay tau (ms)')
+    ##################################################
+    ## 1. Linear track simulation
+    ##################################################
+    overwrite = False
+    filename = 'Figure5_linear_track_SR_matrices.pkl'
 
-    ax[3].plot(controlI,g_volatile.decay_tau(controlI=controlI*g_volatile.stim_scaling,temperature=64),c='b')
-    ax[3].set_title('Temp=64°C')
-    ax[3].set_xlabel('Control current (mA)')
-    ax[3].set_ylabel('g decay tau (ms)')
+    M_dict, size = simulate_linear_track_SR(filename, btsp_func, overwrite)
 
-    plt.suptitle('VO$_{2}$ volatile resistor properties (modeled on data)')
-    plt.tight_layout()
+    # Plot learned successor weights
+    axes = gs.GridSpec(nrows=1, ncols=2, left=0.06, right=0.5, top=0.78, bottom=0.62, wspace=0.06)
+    ax1 = fig.add_subplot(axes[0])
+    ax2 = fig.add_subplot(axes[1])
+    plot_linear_track_SR(M_dict, learning_rules[3:], fig, (ax1, ax2))
+
+    # Plot quantification of SR correlation
+    axes = gs.GridSpec(nrows=1, ncols=1, left=0.7, right=0.99, top=0.78, bottom=0.62)
+    ax = fig.add_subplot(axes[0])
+    plot_SR_correlation(M_dict, learning_rules[2:], size, ax, colors)
+
+
+    ##################################################
+    ## 2. Gridworld simulation
+    ##################################################
+    overwrite = False
+    filename = 'Figure6_norect_1wi_ET4_round3.pkl'
+    random_seeds = [42, 12, 4321, 674, 974, 295, 2763, 809, 2349, 7862]
+
+    environment = GridWorld((5, 6), walls=(np.array([1, 2, 3]), 2), rewards=(1, 5), initial_state=(3, 1)) # 5x6 environment with simple wall
+    grid_simulations_data = simulate_gridworld_multiple_seeds(learning_rules, random_seeds, filename, btsp_func, environment, overwrite)    
+
+    # Plot example trajectories
+    axes = gs.GridSpec(nrows=2, ncols=3, left=0.01, right=0.6, top=0.55, bottom=0.22, wspace=0.06)
+    example_seed = 42
+    for i, rule in enumerate(learning_rules[3:]):
+        ax = fig.add_subplot(axes[i, 0])
+        plot_grid(ax, environment, grid_simulations_data[example_seed][rule]['trajectories'], legend=(i==0))
+        ax.set_title(f'{rule}')
+    
+    # Plot example SR place fields
+    cell_nr = 11
+    end_idx = -1 # end of the last trial
+    for i, rule in enumerate(learning_rules[3:]):
+        ax1 = fig.add_subplot(axes[i, 1])
+        ax2 = fig.add_subplot(axes[i, 2])
+        trial_num = 1
+        start_idx = np.sum([len(grid_simulations_data[example_seed][rule]['trajectories'][i]) for i in range(trial_num)]) # index at the end of trial 0
+        plot_SR_place_fields(fig, ax1, ax2, cell_nr, grid_simulations_data[example_seed][rule]['SR_weight_history'], start_idx, end_idx, environment.grid_size)
+
+    # Plot navigation summary quantifications
+    axes = gs.GridSpec(nrows=1, ncols=6, left=0.05, right=0.99, top=0.2, bottom=0.05, hspace=0.5, wspace=1)
+    ax = fig.add_subplot(axes[0:2])
+    plot_pathlength_over_trials(ax, grid_simulations_data, random_seeds, learning_rules[2:], colors)
+
+    ax1 = fig.add_subplot(axes[2])
+    ax2 = fig.add_subplot(axes[3])
+    plot_navigation_summary(ax1, ax2, grid_simulations_data, random_seeds, learning_rules[2:], colors)
+    
+    ax = fig.add_subplot(axes[4:6])
+    plot_cumulative_reward(ax, grid_simulations_data, learning_rules[2:], colors)
 
     if save:
-        fig.savefig('figures/0-Supplementary Figures/Supplementary_VO2_emulation_properties.png',dpi=300)
-        fig.savefig('figures/0-Supplementary Figures/Supplementary_VO2_emulation_properties.svg',dpi=300)
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_BTSP_variations.png',dpi=300)
+        fig.savefig('figures/0-Supplementary Figures/Supplementary_BTSP_variations.svg',dpi=300)
+
 
 
 def generate_Supplementary4(save):
@@ -632,10 +713,13 @@ if __name__ == '__main__':
     update_plot_defaults()
 
     # generate_Supplementary1(save)
-    # generate_Supplementary2(save)
-    # generate_Supplementary3(save)
     # generate_Supplementary4(save)
     # generate_Supplementary5(save)
-    generate_Supplementary6(save)
+    # generate_Supplementary6(save)
+
+    # generate_Figure_S6(save)
+    # generate_Figure_S9(save)
+    generate_Figure_S11(save)
+
 
     plt.show()

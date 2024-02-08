@@ -5,11 +5,11 @@ def update_plot_defaults():
     plt.rcParams.update({'font.size': 8,
                      'axes.spines.right': False,
                      'axes.spines.top': False,
-                     'axes.linewidth':1,
+                     'axes.linewidth':0.5,
                      'xtick.major.size': 3,
-                     'xtick.major.width': 1,
+                     'xtick.major.width': 0.5,
                      'ytick.major.size': 3,
-                     'ytick.major.width': 1,
+                     'ytick.major.width': 0.5,
                      'legend.frameon': False,
                      'legend.handletextpad': 0.1,
                      'figure.figsize': [10.0, 3.0],
@@ -179,4 +179,9 @@ def get_BTSP_function(Wmax, k_pot, k_dep, sig_pot, sig_dep):
     depression (scaled by potentiation and depression coefficients).
     '''
     dW = lambda ETxIS, W: (Wmax - W) * k_pot * sig_pot(ETxIS) - W * k_dep * sig_dep(ETxIS)
+    return dW
+
+
+def get_simple_BTSP_function():
+    dW = lambda ETxIS, W: ETxIS
     return dW

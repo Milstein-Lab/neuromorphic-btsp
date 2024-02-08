@@ -88,7 +88,6 @@ def VO2_LIF_BTSP_simulation(VO2_temp, num_synapses, firing_rate, w_init=None, ji
         synapse_ETs.append(Volatile_Resistor(dt, temperature=74.34+temperature_jitter, metalR=100, insulatorR=10*kOhm, stim_scaling=100))
     ET_pulse_dur = 20 # ms
     read_dur = 2000 # ms
-    # learning_rate = 0.03
     learning_rate = 0.012
 
     ##############################################################
@@ -376,4 +375,4 @@ def generate_Figure4(show=True, save=False):
 
 if __name__ == '__main__':
     update_plot_defaults()
-    generate_Figure4(show=True, save=False)
+    generate_Figure4(show=True, save=True)
