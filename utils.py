@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def update_plot_defaults():
-    plt.rcParams.update({'font.size': 8,
+    plt.rcParams.update({'font.size': 6,
                      'axes.spines.right': False,
                      'axes.spines.top': False,
                      'axes.linewidth':0.5,

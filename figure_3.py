@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gs
 
-from utils import Volatile_Resistor,  Memristor, poisson_spike_train
+from utils import Volatile_Resistor,  Memristor, poisson_spike_train, update_plot_defaults
 
 
 ########################################################################################################################
@@ -109,72 +110,129 @@ def VO2_LIF_simulation(VO2_temp, num_synapses, firing_rate, VO2_pulse_dur):
 def generate_Figure3(show=False, save=False):
     np.random.seed(123)
     linewidth = 0.5
-
-    plt.rcParams.update({'font.size': 8,
-                    'axes.spines.right': False,
-                    'axes.spines.top': False,
-                    'axes.linewidth':0.5,
-                    'xtick.major.size': 3,
-                    'xtick.major.width': 0.5,
-                    'ytick.major.size': 3,
-                    'ytick.major.width': 0.5,
-                    'legend.frameon': False,
-                    'legend.handletextpad': 0.1,
-                    'figure.figsize': [10.0, 3.0],
-                    'svg.fonttype': 'none',
-                    'text.usetex': False})
+    same_spike_train = False
 
     mm = 1/25.4
-    fig, axes = plt.subplots(4,2, figsize=(130*mm,95*mm))
+    fig = plt.figure(figsize=(60*mm, 52*mm))
+    axes = gs.GridSpec(nrows=8, ncols=1, left=0.14, right=0.99, top=0.99, bottom=0.08, hspace=0.8)
+
     temperatures = [62.01, 69.25] # 1ms and 100ms time constants
     pulsewidth = [3., 10.]
 
     # titles = [f'Soma (fasrtVO$_{2}$ temp. = {temperatures[0]} C)', f'Dendrite (VO$_{2}$ temp. = {temperatures[1]} C)']
-    example_colors = [['#FF6754', '#2D93DC'], ['#FF7F00', '#984EA3']]
-    for col, VO2_temp in enumerate(temperatures):
-        # np.random.seed(42)
-        simulation_results = VO2_LIF_simulation(VO2_temp, num_synapses=10, firing_rate=30, VO2_pulse_dur=pulsewidth[col])
+    example_colors = [['#FF6754', '#2D93DC'], ['#FF7F00', '#984EA3']] # red, blue
 
-        ax = axes[0,col]
-        for synapse_id, spike_times in enumerate(simulation_results['spike_times']):
-            if synapse_id in [0,1]:
-                color = example_colors[col][synapse_id]
-            else:
-                color = 'gray'
-            ax.scatter(spike_times, synapse_id*np.ones(len(spike_times)), s=10, color=color, marker='|', linewidth=linewidth)
-        ax.set_ylabel('Synapse')
-        ax.set_ylim(top=len(simulation_results['spike_times']))
-        ax.set_ylim(ax.get_ylim()[::-1]) # flip y axis
-        ax.set_yticks(np.arange(0, len(simulation_results['spike_times']), 3))
-        ax.set_yticklabels(np.arange(1, len(simulation_results['spike_times'])+1, 3))
-        # ax.set_title(titles[col], fontsize=10, y=1.)
-        ax.set_xticklabels([])
+    # Soma simulation
+    temperature = 62.01
+    if same_spike_train:
+        np.random.seed(42)
+    simulation_results = VO2_LIF_simulation(temperature, num_synapses=10, firing_rate=30, VO2_pulse_dur=3)
+
+    ax = fig.add_subplot(axes[0])
+    for synapse_id, spike_times in enumerate(simulation_results['spike_times']):
+        ax.scatter(spike_times, synapse_id*np.ones(len(spike_times)), s=2, color='gray', marker='|', linewidth=linewidth)
+    ax.set_ylabel('Synapse')
+    ax.set_ylim(top=len(simulation_results['spike_times']))
+    ax.set_ylim(ax.get_ylim()[::-1]) # flip y axis
+    ax.set_yticks(np.arange(0, len(simulation_results['spike_times']), 3))
+    ax.set_yticklabels(np.arange(1, len(simulation_results['spike_times'])+1, 3))
+    ax.set_xticks([])
+    ax.spines['bottom'].set_visible(False)
+
+    ax = fig.add_subplot(axes[1:3])
+    ax.plot(simulation_results['time'], simulation_results['V']*1e3, color='k', linewidth=linewidth)
+    ax.axhline(y=simulation_results['V_th']*1e3, color='k', linestyle='--', alpha=0.3, linewidth=1.5)
+    spike_times = simulation_results['output_spike_times']
+    ax.scatter(spike_times, 1.1*np.ones(len(spike_times))*simulation_results['V_th']*1e3, s=30, color='r', marker='|', linewidth=2*linewidth)
+    ax.set_ylabel('Voltage (mV)')
+    ax.set_xticklabels([])
+    ax.set_title('Soma (fast VO$_{2}$ temp. = 62.01 C)', fontsize=6, y=1.)
+
+    ax = fig.add_subplot(axes[3])
+    ax.plot(simulation_results['time'], np.array(simulation_results['VO2_cell'].g_history)*1000, color='k', linewidth=linewidth)
+    g_max = np.max(simulation_results['VO2_cell'].g_history)*1000
+    for t in spike_times:
+        ax.plot([t, t+simulation_results['VO2_pulse_dur']], [g_max*1.1, g_max*1.1], color='r', linewidth=1.5)
+    ax.set_ylabel('Conductance (mS)', labelpad=-0.5)
+    ax.set_xticklabels([])
+
+    # Dendrite simulation
+    temperature = 69.25
+    if same_spike_train:
+        np.random.seed(42)
+    simulation_results = VO2_LIF_simulation(temperature, num_synapses=10, firing_rate=30, VO2_pulse_dur=10)
+
+    ax = fig.add_subplot(axes[4])
+    for synapse_id, spike_times in enumerate(simulation_results['spike_times']):
+        ax.scatter(spike_times, synapse_id*np.ones(len(spike_times)), s=2, color='gray', marker='|', linewidth=linewidth)
+    ax.set_ylabel('Synapse')
+    ax.set_ylim(top=len(simulation_results['spike_times']))
+    ax.set_ylim(ax.get_ylim()[::-1]) # flip y axis
+    ax.set_yticks(np.arange(0, len(simulation_results['spike_times']), 3))
+    ax.set_yticklabels(np.arange(1, len(simulation_results['spike_times'])+1, 3))
+    ax.set_xticks([])
+    ax.spines['bottom'].set_visible(False)
+
+    ax = fig.add_subplot(axes[5:7])
+    ax.plot(simulation_results['time'], simulation_results['V']*1e3, color='k', linewidth=linewidth)
+    ax.axhline(y=simulation_results['V_th']*1e3, color='k', linestyle='--', alpha=0.3, linewidth=1.5)
+    spike_times = simulation_results['output_spike_times']
+    ax.scatter(spike_times, 1.1*np.ones(len(spike_times))*simulation_results['V_th']*1e3, s=30, color='r', marker='|', linewidth=2*linewidth)
+    ax.set_ylabel('Voltage (mV)')
+    ax.set_xticklabels([])
+    ax.set_title('Dendrite (VO$_{2}$ temp. = 69.25 C)', fontsize=6, y=1.)
+
+    ax = fig.add_subplot(axes[7])
+    ax.plot(simulation_results['time'], np.array(simulation_results['VO2_cell'].g_history)*1000, color='k', linewidth=linewidth)
+    g_max = np.max(simulation_results['VO2_cell'].g_history)*1000
+    for t in spike_times:
+        ax.plot([t, t+simulation_results['VO2_pulse_dur']], [g_max*1.1, g_max*1.1], color='r', linewidth=1.5)
+    ax.set_ylabel('Conductance (mS)', labelpad=-0.5)
+
+    ax.set_xlabel('Time (ms)')
+
+
+
+
+    # for i, VO2_temp in enumerate(temperatures):
+    #     # np.random.seed(42)
+    #     simulation_results = VO2_LIF_simulation(VO2_temp, num_synapses=10, firing_rate=30, VO2_pulse_dur=pulsewidth[i])
+
+    #     ax = fig.add_subplot(axes[0+i*3])
+    #     for synapse_id, spike_times in enumerate(simulation_results['spike_times']):
+    #         ax.scatter(spike_times, synapse_id*np.ones(len(spike_times)), s=5, color='gray', marker='|', linewidth=linewidth)
+    #     ax.set_ylabel('Synapse')
+    #     ax.set_ylim(top=len(simulation_results['spike_times']))
+    #     ax.set_ylim(ax.get_ylim()[::-1]) # flip y axis
+    #     ax.set_yticks(np.arange(0, len(simulation_results['spike_times']), 3))
+    #     ax.set_yticklabels(np.arange(1, len(simulation_results['spike_times'])+1, 3))
+    #     # ax.set_title(titles[col], fontsize=10, y=1.)
+    #     ax.set_xticklabels([])
         
-        ax = axes[1,col]
-        # ax.plot(simulation_results['time'], simulation_results['I'])
-        ax.plot(simulation_results['time'], simulation_results['I_syn'][0]*1e6, label=f'Synapse 1 (R={simulation_results["synapses"][0].R/1e3:.0f} k$\Omega$)', color=example_colors[col][0], linewidth=linewidth)
-        ax.plot(simulation_results['time'], simulation_results['I_syn'][1]*1e6, label=f'Synapse 2 (R={simulation_results["synapses"][1].R/1e3:.0f} k$\Omega$)', color=example_colors[col][1], linewidth=linewidth)
-        ax.set_ylabel('Current ($\mu$A)')
-        ax.set_xticklabels([])
-        # ax.legend(loc='upper right',ncol=1, frameon=False, handlelength=0.8, handletextpad=0.3, bbox_to_anchor=(1., 1.1))
+    #     # ax = axes[1,col]
+    #     # # ax.plot(simulation_results['time'], simulation_results['I'])
+    #     # ax.plot(simulation_results['time'], simulation_results['I_syn'][0]*1e6, label=f'Synapse 1 (R={simulation_results["synapses"][0].R/1e3:.0f} k$\Omega$)', color=example_colors[col][0], linewidth=linewidth)
+    #     # ax.plot(simulation_results['time'], simulation_results['I_syn'][1]*1e6, label=f'Synapse 2 (R={simulation_results["synapses"][1].R/1e3:.0f} k$\Omega$)', color=example_colors[col][1], linewidth=linewidth)
+    #     # ax.set_ylabel('Current ($\mu$A)')
+    #     # ax.set_xticklabels([])
+    #     # ax.legend(loc='upper right',ncol=1, frameon=False, handlelength=0.8, handletextpad=0.3, bbox_to_anchor=(1., 1.1))
         
-        ax = axes[2,col]
-        ax.plot(simulation_results['time'], simulation_results['V']*1e3, color='k', linewidth=linewidth)
-        ax.axhline(y=simulation_results['V_th']*1e3, color='k', linestyle='--', alpha=0.3, linewidth=1.5)
-        spike_times = simulation_results['output_spike_times']
-        ax.scatter(spike_times, 1.1*np.ones(len(spike_times))*simulation_results['V_th']*1e3, s=30, color='r', marker='|', linewidth=2*linewidth)
-        ax.set_ylabel('Voltage (mV)')
-        ax.set_xticklabels([])
+    #     ax = fig.add_subplot(axes[1+i*3])
+    #     ax.plot(simulation_results['time'], simulation_results['V']*1e3, color='k', linewidth=linewidth)
+    #     ax.axhline(y=simulation_results['V_th']*1e3, color='k', linestyle='--', alpha=0.3, linewidth=1.5)
+    #     spike_times = simulation_results['output_spike_times']
+    #     ax.scatter(spike_times, 1.1*np.ones(len(spike_times))*simulation_results['V_th']*1e3, s=30, color='r', marker='|', linewidth=2*linewidth)
+    #     ax.set_ylabel('Voltage (mV)')
+    #     ax.set_xticklabels([])
 
-        ax = axes[3,col]
-        ax.plot(simulation_results['time'], np.array(simulation_results['VO2_cell'].g_history)*1000, color='k', linewidth=linewidth)
-        ax.set_ylabel('Conductance (mS)')
-        g_max = np.max(simulation_results['VO2_cell'].g_history)*1000
-        for t in spike_times:
-            ax.plot([t, t+simulation_results['VO2_pulse_dur']], [g_max*1.1, g_max*1.1], color='r', linewidth=1.5)
-        ax.set_xlabel('Time (ms)')
+    #     ax = fig.add_subplot(axes[2+i*3])
+    #     ax.plot(simulation_results['time'], np.array(simulation_results['VO2_cell'].g_history)*1000, color='k', linewidth=linewidth)
+    #     g_max = np.max(simulation_results['VO2_cell'].g_history)*1000
+    #     for t in spike_times:
+    #         ax.plot([t, t+simulation_results['VO2_pulse_dur']], [g_max*1.1, g_max*1.1], color='r', linewidth=1.5)
+    #     ax.set_xlabel('Time (ms)')
+    #     ax.set_ylabel('Conductance (mS)', labelpad=-0.5)
 
-    plt.tight_layout(h_pad=1, w_pad=1)
 
     if show:
         plt.show()
@@ -185,4 +243,5 @@ def generate_Figure3(show=False, save=False):
 
 
 if __name__ == '__main__':
+    update_plot_defaults()
     generate_Figure3(show=True, save=True)
